@@ -16,49 +16,58 @@ class XWalkWebContentsDelegate
     : public web_contents_delegate_android::WebContentsDelegateAndroid {
  public:
   XWalkWebContentsDelegate(JNIEnv* env, jobject obj);
-  virtual ~XWalkWebContentsDelegate();
+  ~XWalkWebContentsDelegate() override;
 
-  virtual void AddNewContents(content::WebContents* source,
-                              content::WebContents* new_contents,
-                              WindowOpenDisposition disposition,
-                              const gfx::Rect& initial_pos,
-                              bool user_gesture,
-                              bool* was_blocked) OVERRIDE;
-  virtual void CloseContents(content::WebContents* source) OVERRIDE;
-  virtual void ActivateContents(content::WebContents* contents) OVERRIDE;
-  virtual void UpdatePreferredSize(content::WebContents* web_contents,
-                                   const gfx::Size& pref_size) OVERRIDE;
-  virtual void RunFileChooser(
+  void AddNewContents(content::WebContents* source,
+                      content::WebContents* new_contents,
+                      WindowOpenDisposition disposition,
+                      const gfx::Rect& initial_pos,
+                      bool user_gesture,
+                      bool* was_blocked) override;
+  void CloseContents(content::WebContents* source) override;
+  void ActivateContents(content::WebContents* contents) override;
+  void UpdatePreferredSize(content::WebContents* web_contents,
+                                   const gfx::Size& pref_size) override;
+  void RunFileChooser(
       content::WebContents* web_contents,
-      const content::FileChooserParams& params) OVERRIDE;
-  virtual content::JavaScriptDialogManager*
-      GetJavaScriptDialogManager() OVERRIDE;
+      const content::FileChooserParams& params) override;
+  content::JavaScriptDialogManager* GetJavaScriptDialogManager(
+      content::WebContents* web_contents) override;
 
-  virtual void RequestMediaAccessPermission(
+  void RequestMediaAccessPermission(
       content::WebContents* web_contents,
       const content::MediaStreamRequest& request,
-      const content::MediaResponseCallback& callback) OVERRIDE;
+      const content::MediaResponseCallback& callback) override;
 
-  virtual void RendererUnresponsive(content::WebContents* source) OVERRIDE;
-  virtual void RendererResponsive(content::WebContents* source) OVERRIDE;
+  void RendererUnresponsive(content::WebContents* source) override;
+  void RendererResponsive(content::WebContents* source) override;
 
-  virtual void HandleKeyboardEvent(
+  bool AddMessageToConsole(content::WebContents* source,
+                           int32 level,
+                           const base::string16& message,
+                           int32 line_no,
+                           const base::string16& source_id) override;
+  void HandleKeyboardEvent(
       content::WebContents* source,
-      const content::NativeWebKeyboardEvent& event) OVERRIDE;
+      const content::NativeWebKeyboardEvent& event) override;
 
-  virtual void ToggleFullscreenModeForTab(content::WebContents* web_contents,
-                                          bool enter_fullscreen) OVERRIDE;
-  virtual bool IsFullscreenForTabOrPending(
-      const content::WebContents* web_contents) const OVERRIDE;
+  void EnterFullscreenModeForTab(
+      content::WebContents* web_contents,
+      const GURL& origin) override;
+  void ExitFullscreenModeForTab(
+      content::WebContents* web_contents) override;
+  bool IsFullscreenForTabOrPending(
+      const content::WebContents* web_contents) const override;
 
-  virtual bool ShouldCreateWebContents(
+  bool ShouldCreateWebContents(
       content::WebContents* web_contents,
       int route_id,
+      int main_frame_route_id,
       WindowContainerType window_container_type,
       const base::string16& frame_name,
       const GURL& target_url,
       const std::string& partition_id,
-      content::SessionStorageNamespace* session_storage_namespace) OVERRIDE;
+      content::SessionStorageNamespace* session_storage_namespace) override;
 
  private:
   scoped_ptr<content::JavaScriptDialogManager> javascript_dialog_manager_;

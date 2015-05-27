@@ -42,6 +42,7 @@ import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationHistory;
 import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_public.browser.navigation_controller.UserAgentOverrideOption;
 import org.chromium.media.MediaPlayerBridge;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.gfx.DeviceDisplayInfo;
@@ -69,6 +70,7 @@ class XWalkContent extends FrameLayout implements XWalkPreferencesInternal.KeyVa
     private XWalkLaunchScreenManager mLaunchScreenManager;
     private NavigationController mNavigationController;
     private WebContents mWebContents;
+    private boolean mIsLoaded = false;
 
     long mNativeContent;
     long mNativeWebContents;
@@ -113,9 +115,9 @@ class XWalkContent extends FrameLayout implements XWalkPreferencesInternal.KeyVa
         MediaPlayerBridge.setResourceLoadingFilter(
                 new XWalkMediaPlayerResourceLoadingFilter());
 
-        XWalkPreferencesInternal.load(this);
-
         setNativeContent(nativeInit());
+
+        XWalkPreferencesInternal.load(this);
     }
 
     private void setNativeContent(long newNativeContent) {
@@ -150,13 +152,12 @@ class XWalkContent extends FrameLayout implements XWalkPreferencesInternal.KeyVa
         // bind all the native->java relationships.
         mCleanupReference = new CleanupReference(this, new DestroyRunnable(mNativeContent));
 
-        mNativeWebContents = nativeGetWebContents(mNativeContent);
-
+        WebContents webContents = nativeGetWebContents(mNativeContent);
 
         // Initialize ContentView.
         mContentViewCore = new ContentViewCore(getContext());
         mContentView = ContentView.newInstance(getContext(), mContentViewCore);
-        mContentViewCore.initialize(mContentView, mContentView, mNativeWebContents, mWindow);
+        mContentViewCore.initialize(mContentView, mContentView, webContents, mWindow);
         mWebContents = mContentViewCore.getWebContents();
         mNavigationController = mWebContents.getNavigationController();
         addView(mContentView, new FrameLayout.LayoutParams(
@@ -176,12 +177,10 @@ class XWalkContent extends FrameLayout implements XWalkPreferencesInternal.KeyVa
         // the members mAllowUniversalAccessFromFileURLs and mAllowFileAccessFromFileURLs
         // won't be changed from false to true at the same time in the constructor of
         // XWalkSettings class.
-        mSettings = new XWalkSettings(getContext(), mNativeWebContents, false);
+        mSettings = new XWalkSettings(getContext(), webContents, false);
         // Enable AllowFileAccessFromFileURLs, so that files under file:// path could be
         // loaded by XMLHttpRequest.
         mSettings.setAllowFileAccessFromFileURLs(true);
-        // Enable this by default to suppport new window creation
-        mSettings.setSupportMultipleWindows(true);
 
         nativeSetJavaPeers(mNativeContent, this, mXWalkContentsDelegateAdapter, mContentsClientBridge,
                 mIoThreadClient, mContentsClientBridge.getInterceptNavigationDelegate());
@@ -223,7 +222,7 @@ class XWalkContent extends FrameLayout implements XWalkPreferencesInternal.KeyVa
                 params = LoadUrlParams.createLoadDataParamsWithBaseUrl(
                         content, "text/html", false, url, null);
             }
-            params.setOverrideUserAgent(LoadUrlParams.UA_OVERRIDE_TRUE);
+            params.setOverrideUserAgent(UserAgentOverrideOption.TRUE);
             mNavigationController.loadUrl(params);
         }
 
@@ -239,6 +238,7 @@ class XWalkContent extends FrameLayout implements XWalkPreferencesInternal.KeyVa
         }
 
         doLoadUrl(url, data);
+        mIsLoaded = true;
     }
 
     public void reload(int mode) {
@@ -252,6 +252,7 @@ class XWalkContent extends FrameLayout implements XWalkPreferencesInternal.KeyVa
             default:
                 mNavigationController.reload(true);
         }
+        mIsLoaded = true;
     }
 
     public String getUrl() {
@@ -286,7 +287,7 @@ class XWalkContent extends FrameLayout implements XWalkPreferencesInternal.KeyVa
                 }
             };
         }
-        mContentViewCore.evaluateJavaScript(script, coreCallback);
+        mContentViewCore.getWebContents().evaluateJavaScript(script, coreCallback);
     }
 
     public void setUIClient(XWalkUIClientInternal client) {
@@ -314,7 +315,7 @@ class XWalkContent extends FrameLayout implements XWalkPreferencesInternal.KeyVa
         mContentsClientBridge.setXWalkClient(client);
     }
 
-    public void setDownloadListener(DownloadListener listener) {
+    public void setDownloadListener(XWalkDownloadListenerInternal listener) {
         if (mNativeContent == 0) return;
         mContentsClientBridge.setDownloadListener(listener);
     }
@@ -423,8 +424,26 @@ class XWalkContent extends FrameLayout implements XWalkPreferencesInternal.KeyVa
         return nativeGetVersion(mNativeContent);
     }
 
-    public void setBackgroundColor(int color) {
+    private boolean isOpaque(int color) {
+        return ((color >> 24) & 0xFF) == 0xFF;
+    }
+
+    public void setBackgroundColor(final int color) {
         if (mNativeContent == 0) return;
+        if (mIsLoaded == false) {
+            post(new Runnable() {
+                @Override
+                public void run() {
+                    setBackgroundColor(color);
+                }
+            });
+            return;
+        }
+        if (isOpaque(color) == false) {
+            setOverlayVideoMode(true);
+            mContentViewRenderView.setSurfaceViewBackgroundColor(color);
+            mContentViewCore.setBackgroundOpaque(false);
+        }
         nativeSetBackgroundColor(mNativeContent, color);
     }
 
@@ -484,6 +503,7 @@ class XWalkContent extends FrameLayout implements XWalkPreferencesInternal.KeyVa
         if (!nativeSetManifest(mNativeContent, baseUrl, content)) {
             throw new RuntimeException("Failed to parse the manifest file: " + url);
         }
+        mIsLoaded = true;
     }
 
     public XWalkNavigationHistoryInternal getNavigationHistory() {
@@ -756,9 +776,42 @@ class XWalkContent extends FrameLayout implements XWalkPreferencesInternal.KeyVa
         }
     }
 
+    public void setZOrderOnTop(boolean onTop) {
+        if (mContentViewRenderView == null) return;
+        mContentViewRenderView.setZOrderOnTop(onTop);
+    }
+
+    public boolean zoomIn() {
+        if (mNativeContent == 0) return false;
+        return mContentViewCore.zoomIn();
+    }
+
+    public boolean zoomOut() {
+        if (mNativeContent == 0) return false;
+        return mContentViewCore.zoomOut();
+    }
+
+    public void zoomBy(float delta) {
+        if (mNativeContent == 0) return;
+        if (delta < 0.01f || delta > 100.0f) {
+            throw new IllegalStateException("zoom delta value outside [0.01, 100] range.");
+        }
+        mContentViewCore.pinchByDelta(delta);
+    }
+
+    public boolean canZoomIn() {
+        if (mNativeContent == 0) return false;
+        return mContentViewCore.canZoomIn();
+    }
+
+    public boolean canZoomOut() {
+        if (mNativeContent == 0) return false;
+        return mContentViewCore.canZoomOut();
+    }
+
     private native long nativeInit();
     private static native void nativeDestroy(long nativeXWalkContent);
-    private native long nativeGetWebContents(long nativeXWalkContent);
+    private native WebContents nativeGetWebContents(long nativeXWalkContent);
     private native long nativeReleasePopupXWalkContent(long nativeXWalkContent);
     private native void nativeSetJavaPeers(
             long nativeXWalkContent,

@@ -31,6 +31,7 @@
 #include "content/public/browser/web_contents_delegate.h"
 #include "grit/xwalk_resources.h"
 #include "jni/XWalkDevToolsServer_jni.h"
+#include "net/base/net_errors.h"
 #include "net/socket/unix_domain_listen_socket_posix.h"
 #include "ui/base/resource/resource_bundle.h"
 
@@ -44,7 +45,8 @@ namespace {
 // for remote debugging to work in chrome (see chrome's devtools_ui.cc).
 // Currently, the chrome version is hardcoded because of this dependancy.
 const char kFrontEndURL[] =
-    "http://chrome-devtools-frontend.appspot.com/serve_rev/%s/devtools.html";
+    "http://chrome-devtools-frontend.appspot.com/serve_rev/%s/inspector.html";
+const int kBackLog = 10;
 
 bool AuthorizeSocketAccessWithDebugPermission(
      const net::UnixDomainServerSocket::Credentials& credentials) {
@@ -63,24 +65,19 @@ class XWalkAndroidDevToolsHttpHandlerDelegate
   XWalkAndroidDevToolsHttpHandlerDelegate() {
   }
 
-  virtual std::string GetDiscoveryPageHTML() OVERRIDE {
+  std::string GetDiscoveryPageHTML() override {
     return ResourceBundle::GetSharedInstance().GetRawDataResource(
         IDR_DEVTOOLS_FRONTEND_PAGE_HTML).as_string();
   }
 
-  virtual bool BundlesFrontendResources() OVERRIDE {
+  bool BundlesFrontendResources() override {
     return false;
   }
 
-  virtual base::FilePath GetDebugFrontendDir() OVERRIDE {
+  base::FilePath GetDebugFrontendDir() override {
     return base::FilePath();
   }
 
-  virtual scoped_ptr<net::StreamListenSocket> CreateSocketForTethering(
-      net::StreamListenSocket::Delegate* delegate,
-      std::string* name) OVERRIDE {
-    return scoped_ptr<net::StreamListenSocket>();
-  }
  private:
   DISALLOW_COPY_AND_ASSIGN(XWalkAndroidDevToolsHttpHandlerDelegate);
 };
@@ -92,18 +89,23 @@ class UnixDomainServerSocketFactory
   explicit UnixDomainServerSocketFactory(
       const std::string& socket_name,
       const net::UnixDomainServerSocket::AuthCallback& auth_callback)
-      : content::DevToolsHttpHandler::ServerSocketFactory(socket_name, 0, 1),
-      auth_callback_(auth_callback) {}
+      : socket_name_(socket_name),
+        auth_callback_(auth_callback) {}
 
  private:
   // content::DevToolsHttpHandler::ServerSocketFactory.
-  virtual scoped_ptr<net::ServerSocket> Create() const OVERRIDE {
-    return scoped_ptr<net::ServerSocket>(
+  scoped_ptr<net::ServerSocket> CreateForHttpServer() override {
+    scoped_ptr<net::ServerSocket> socket(
         new net::UnixDomainServerSocket(
             auth_callback_,
             true /* use_abstract_namespace */));
+    if (socket->ListenWithAddressAndPort(socket_name_, 0, kBackLog) != net::OK)
+      return scoped_ptr<net::ServerSocket>();
+
+    return socket;
   }
 
+  const std::string socket_name_;
   const net::UnixDomainServerSocket::AuthCallback auth_callback_;
   DISALLOW_COPY_AND_ASSIGN(UnixDomainServerSocketFactory);
 };
@@ -114,7 +116,6 @@ namespace xwalk {
 
 XWalkDevToolsServer::XWalkDevToolsServer(const std::string& socket_name)
     : socket_name_(socket_name),
-      protocol_handler_(NULL),
       allow_debug_permission_(false),
       allow_socket_access_(false) {
 }
@@ -148,19 +149,14 @@ void XWalkDevToolsServer::Start(bool allow_debug_permission,
 
   scoped_ptr<content::DevToolsHttpHandler::ServerSocketFactory> factory(
       new UnixDomainServerSocketFactory(socket_name_, auth_callback));
-  protocol_handler_ = content::DevToolsHttpHandler::Start(
+  protocol_handler_.reset(content::DevToolsHttpHandler::Start(
       factory.Pass(),
       base::StringPrintf(kFrontEndURL, BLINK_UPSTREAM_REVISION),
-      new XWalkAndroidDevToolsHttpHandlerDelegate(), base::FilePath());
+      new XWalkAndroidDevToolsHttpHandlerDelegate(), base::FilePath()));
 }
 
 void XWalkDevToolsServer::Stop() {
-  if (!protocol_handler_)
-    return;
-  // Note that the call to Stop() below takes care of |protocol_handler_|
-  // deletion.
-  protocol_handler_->Stop();
-  protocol_handler_ = NULL;
+  protocol_handler_.reset();
   allow_socket_access_ = false;
   allow_debug_permission_ = false;
 }

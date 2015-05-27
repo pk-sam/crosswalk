@@ -4,7 +4,7 @@
 
 #include "xwalk/runtime/browser/xwalk_browser_main_parts_tizen.h"
 
-#include "base/file_util.h"
+#include "base/files/file_util.h"
 #include "base/files/file_path.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/content_switches.h"
@@ -12,6 +12,7 @@
 #include "xwalk/application/browser/application_service.h"
 #include "xwalk/application/browser/application_system.h"
 #include "xwalk/extensions/common/xwalk_extension.h"
+#include "xwalk/extensions/common/xwalk_extension_switches.h"
 #include "xwalk/runtime/browser/xwalk_runner.h"
 #include "xwalk/runtime/common/xwalk_runtime_features.h"
 #include "ui/gl/gl_switches.h"
@@ -30,7 +31,7 @@ XWalkBrowserMainPartsTizen::XWalkBrowserMainPartsTizen(
 }
 
 void XWalkBrowserMainPartsTizen::PreMainMessageLoopStart() {
-  CommandLine* command_line = CommandLine::ForCurrentProcess();
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   command_line->AppendSwitch(switches::kIgnoreGpuBlacklist);
 
   // Enable Accelerated 2D Canvas.
@@ -44,6 +45,10 @@ void XWalkBrowserMainPartsTizen::PreMainMessageLoopStart() {
       gl_name = gfx::kGLImplementationEGLName;
     command_line->AppendSwitchASCII(switches::kUseGL, gl_name);
   }
+
+  // Disable ExtensionProcess for Tizen.
+  // External extensions will run in the BrowserProcess (in process mode).
+  command_line->AppendSwitch(switches::kXWalkDisableExtensionProcess);
 
   XWalkBrowserMainParts::PreMainMessageLoopStart();
 }

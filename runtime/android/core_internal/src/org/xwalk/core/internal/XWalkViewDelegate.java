@@ -18,7 +18,6 @@ import android.content.res.Resources.NotFoundException;
 import android.os.Build;
 import android.util.Log;
 
-import org.chromium.base.ApplicationStatusManager;
 import org.chromium.base.CommandLine;
 import org.chromium.base.JNINamespace;
 import org.chromium.base.PathUtils;
@@ -26,10 +25,10 @@ import org.chromium.base.ResourceExtractor;
 import org.chromium.base.ResourceExtractor.ResourceIntercepter;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.library_loader.LibraryLoader;
+import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.content.browser.BrowserStartupController;
 import org.chromium.content.browser.DeviceUtils;
-import org.chromium.net.NetworkChangeNotifier;
 
 @JNINamespace("xwalk")
 class XWalkViewDelegate {
@@ -40,7 +39,11 @@ class XWalkViewDelegate {
     private static final String[] MANDATORY_PAKS = {
             "xwalk.pak",
             "en-US.pak",
-            "icudtl.dat"
+            "icudtl.dat",
+            // Please refer to XWALK-3516, disable v8 use external startup data,
+            // reopen it if needed later.
+            // "natives_blob.bin",
+            // "snapshot_blob.bin"
     };
     private static final String[] MANDATORY_LIBRARIES = {
             "libxwalkcore.so"
@@ -85,46 +88,35 @@ class XWalkViewDelegate {
         // If context is null, it's called from wrapper's ReflectionHelper to try
         // loading native library within the package. No need to try load from library
         // package in this case.
-        // If context's applicationContext is not the same package with itself,
-        // It's a cross package invoking, load core library from library apk.
+        // If context's not null, it's a cross package invoking, load core library from library apk.
         // Only load the native library from /data/data if the Android version is
         // lower than 4.2. Android enables a system path /data/app-lib to store native
         // libraries starting from 4.2 and load them automatically.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN_MR1 && context != null &&
-                !context.getApplicationContext().getPackageName().equals(context.getPackageName())) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN_MR1 && context != null) {
             for (String library : MANDATORY_LIBRARIES) {
                 System.load("/data/data/" + context.getPackageName() + "/lib/" + library);
             }
         }
-        loadLibrary(context);
 
-        if (sRunningOnIA && !nativeIsLibraryBuiltForIA()) {
+        PathUtils.setPrivateDataDirectorySuffix(PRIVATE_DATA_DIRECTORY_SUFFIX);
+        try {
+            LibraryLoader libraryLoader = LibraryLoader.get(LibraryProcessType.PROCESS_BROWSER);
+            libraryLoader.loadNow(context, true);
+        } catch (ProcessInitException e) {
+            throw new RuntimeException("Cannot load Crosswalk Core", e);
+        }
+
+        if (sRunningOnIA != nativeIsLibraryBuiltForIA()) {
             throw new UnsatisfiedLinkError();
         }
         sLibraryLoaded = true;
     }
 
-    public static void init(XWalkViewInternal xwalkView) throws UnsatisfiedLinkError {
-        if (sInitialized) {
-            return;
-        }
+    public static void init(final Context context) {
+        if (sInitialized) return;
 
-        loadXWalkLibrary(xwalkView.getContext());
-
-        // Initialize the ActivityStatus. This is needed and used by many internal
-        // features such as location provider to listen to activity status.
-        ApplicationStatusManager.init(xwalkView.getActivity().getApplication());
-
-        // Auto detect network connectivity state.
-        // setAutoDetectConnectivityState() need to be called before activity started.
-        NetworkChangeNotifier.init(xwalkView.getActivity());
-        NetworkChangeNotifier.setAutoDetectConnectivityState(true);
-
-        // We will miss activity onCreate() status in ApplicationStatusManager,
-        // informActivityStarted() will simulate these callbacks.
-        ApplicationStatusManager.informActivityStarted(xwalkView.getActivity());
-
-        final Context context = xwalkView.getViewContext();
+        // Initialize chromium resources. Assign them the correct ids in xwalk core.
+        XWalkInternalResources.resetIds(context);
 
         // Last place to initialize CommandLine object. If you haven't initialize
         // the CommandLine object before XWalkViewContent is created, here will create
@@ -135,8 +127,13 @@ class XWalkViewDelegate {
         }
 
         ResourceExtractor.setMandatoryPaksToExtract(MANDATORY_PAKS);
-        final int resourcesListResId = context.getResources().getIdentifier(
-                XWALK_RESOURCES_LIST_RES_NAME, "array", context.getPackageName());
+        int resListResId = context.getResources().getIdentifier(
+                XWALK_RESOURCES_LIST_RES_NAME, "array", context.getClass().getPackage().getName());
+        if (resListResId == 0) {
+            resListResId = context.getResources().getIdentifier(
+                    XWALK_RESOURCES_LIST_RES_NAME, "array", context.getPackageName());
+        }
+        final int resourcesListResId = resListResId;
         final AssetManager assets = context.getAssets();
         if (!context.getPackageName().equals(context.getApplicationContext().getPackageName()) ||
                 resourcesListResId != 0) {
@@ -183,7 +180,11 @@ class XWalkViewDelegate {
                     if (resourcesListResId != 0) {
                         String resourceName = resource.split("\\.")[0];
                         int resId = context.getResources().getIdentifier(
-                                resourceName, "raw", context.getPackageName());
+                                resourceName, "raw", context.getClass().getPackage().getName());
+                        if (resId == 0) {
+                            resId = context.getResources().getIdentifier(
+                                    resourceName, "raw", context.getPackageName());
+                        }
                         try {
                             if (resId != 0) return context.getResources().openRawResource(resId);
                         } catch (NotFoundException e) {
@@ -204,21 +205,12 @@ class XWalkViewDelegate {
         sInitialized = true;
     }
 
-    private static void loadLibrary(Context context) {
-        PathUtils.setPrivateDataDirectorySuffix(PRIVATE_DATA_DIRECTORY_SUFFIX);
-        try {
-            LibraryLoader.loadNow(context, true);
-        } catch (ProcessInitException e) {
-            throw new RuntimeException("Cannot load Crosswalk Core", e);
-        }
-    }
-
     private static void startBrowserProcess(final Context context) {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
                 try {
-                    LibraryLoader.ensureInitialized();
+                    LibraryLoader.get(LibraryProcessType.PROCESS_BROWSER).ensureInitialized();
                 } catch (ProcessInitException e) {
                     throw new RuntimeException("Cannot initialize Crosswalk Core", e);
                 }
@@ -226,9 +218,15 @@ class XWalkViewDelegate {
                 CommandLine.getInstance().appendSwitchWithValue(
                         XWalkSwitches.PROFILE_NAME,
                         XWalkPreferencesInternal.getStringValue(XWalkPreferencesInternal.PROFILE_NAME));
+
+                if (XWalkPreferencesInternal.getValue(XWalkPreferencesInternal.ANIMATABLE_XWALK_VIEW) &&
+                        !CommandLine.getInstance().hasSwitch(XWalkSwitches.DISABLE_GPU_RASTERIZATION)) {
+                    CommandLine.getInstance().appendSwitch(XWalkSwitches.DISABLE_GPU_RASTERIZATION);
+                }
+
                 try {
-                    BrowserStartupController.get(context).startBrowserProcessesSync(
-                        true);
+                    BrowserStartupController.get(context, LibraryProcessType.PROCESS_BROWSER).
+                        startBrowserProcessesSync(true);
                 } catch (ProcessInitException e) {
                     throw new RuntimeException("Cannot initialize Crosswalk Core", e);
                 }
@@ -243,7 +241,7 @@ class XWalkViewDelegate {
     private static native boolean nativeIsLibraryBuiltForIA();
 
     static {
-        sRunningOnIA = Build.CPU_ABI.equalsIgnoreCase("x86");
+        sRunningOnIA = Build.CPU_ABI.equalsIgnoreCase("x86") || Build.CPU_ABI.equalsIgnoreCase("x86_64");
         if (!sRunningOnIA) {
             // This is not the final decision yet.
             // With latest Houdini, an app with ARM binary will see system abi as if it's running on

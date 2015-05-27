@@ -13,10 +13,11 @@
 #include "content/public/test/browser_test_utils.h"
 
 using xwalk::extensions::XWalkExtensionService;
+using xwalk::Runtime;
 
 class NamespaceReadOnlyExtensionTest : public XWalkExtensionsTestBase {
  public:
-  virtual void SetUp() OVERRIDE {
+  void SetUp() override {
     XWalkExtensionService::SetExternalExtensionsPathForTesting(
         GetExternalExtensionTestPath(FILE_PATH_LITERAL("multiple_extension")));
     XWalkExtensionsTestBase::SetUp();
@@ -27,11 +28,12 @@ IN_PROC_BROWSER_TEST_F(NamespaceReadOnlyExtensionTest, NamespaceReadOnly) {
   GURL url = GetExtensionsTestURL(base::FilePath(),
                                   base::FilePath().AppendASCII(
                                       "namespace_read_only.html"));
-  content::TitleWatcher title_watcher(runtime()->web_contents(), kPassString);
+  Runtime* runtime = CreateRuntime();
+  content::TitleWatcher title_watcher(runtime->web_contents(), kPassString);
   title_watcher.AlsoWaitForTitle(kFailString);
 
-  xwalk_test_utils::NavigateToURL(runtime(), url);
-  WaitForLoadStop(runtime()->web_contents());
+  xwalk_test_utils::NavigateToURL(runtime, url);
+  WaitForLoadStop(runtime->web_contents());
 
   EXPECT_EQ(kPassString, title_watcher.WaitAndGetTitle());
 }
@@ -40,11 +42,12 @@ IN_PROC_BROWSER_TEST_F(
     NamespaceReadOnlyExtensionTest, NamespaceReadOnlyAfterEntryPointCalled) {
   GURL url = GetExtensionsTestURL(base::FilePath(),
       base::FilePath().AppendASCII("namespace_read_only_with_entrypoint.html"));
-  content::TitleWatcher title_watcher(runtime()->web_contents(), kPassString);
+  Runtime* runtime = CreateRuntime();
+  content::TitleWatcher title_watcher(runtime->web_contents(), kPassString);
   title_watcher.AlsoWaitForTitle(kFailString);
 
-  xwalk_test_utils::NavigateToURL(runtime(), url);
-  WaitForLoadStop(runtime()->web_contents());
+  xwalk_test_utils::NavigateToURL(runtime, url);
+  WaitForLoadStop(runtime->web_contents());
 
   EXPECT_EQ(kPassString, title_watcher.WaitAndGetTitle());
 }

@@ -4,8 +4,8 @@
 
 #include "xwalk/application/common/package/package.h"
 
-#include "base/file_util.h"
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/path_service.h"
 #include "third_party/zlib/google/zip.h"
@@ -16,11 +16,13 @@
 namespace xwalk {
 namespace application {
 
-Package::Package(const base::FilePath& source_path)
+Package::Package(const base::FilePath& source_path,
+    Manifest::Type manifest_type)
     : source_path_(source_path),
       is_extracted_(false),
       is_valid_(false),
-      name_(source_path_.BaseName().AsUTF8Unsafe()) {
+      name_(source_path_.BaseName().AsUTF8Unsafe()),
+      manifest_type_(manifest_type) {
 }
 
 Package::~Package() {

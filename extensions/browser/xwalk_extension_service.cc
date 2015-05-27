@@ -69,7 +69,7 @@ class ExtensionServerMessageFilter : public IPC::MessageFilter,
   }
 
   // IPC::Sender implementation.
-  virtual bool Send(IPC::Message* msg_ptr) OVERRIDE {
+  bool Send(IPC::Message* msg_ptr) override {
     scoped_ptr<IPC::Message> msg(msg_ptr);
 
     if (!sender_)
@@ -79,7 +79,7 @@ class ExtensionServerMessageFilter : public IPC::MessageFilter,
   }
 
  private:
-  virtual ~ExtensionServerMessageFilter() {}
+  ~ExtensionServerMessageFilter() override {}
 
   int64_t GetInstanceIDFromMessage(const IPC::Message& message) {
     PickleIterator iter;
@@ -151,23 +151,23 @@ class ExtensionServerMessageFilter : public IPC::MessageFilter,
   }
 
   // IPC::ChannelProxy::MessageFilter implementation.
-  virtual void OnFilterAdded(IPC::Sender* sender) OVERRIDE {
+  void OnFilterAdded(IPC::Sender* sender) override {
     sender_ = sender;
   }
 
-  virtual void OnFilterRemoved() OVERRIDE {
+  void OnFilterRemoved() override {
     sender_ = NULL;
   }
 
-  virtual void OnChannelClosing() OVERRIDE {
+  void OnChannelClosing() override {
     sender_ = NULL;
   }
 
-  virtual void OnChannelError() OVERRIDE {
+  void OnChannelError() override {
     sender_ = NULL;
   }
 
-  virtual bool OnMessageReceived(const IPC::Message& message) OVERRIDE {
+  bool OnMessageReceived(const IPC::Message& message) override {
     if (IPC_MESSAGE_CLASS(message) != XWalkExtensionClientServerMsgStart)
       return false;
 
@@ -244,7 +244,7 @@ void XWalkExtensionService::OnRenderProcessHostCreatedInternal(
   CreateInProcessExtensionServers(host, data, ui_thread_extensions,
                                   extension_thread_extensions);
 
-  CommandLine* cmd_line = CommandLine::ForCurrentProcess();
+  base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
   if (!cmd_line->HasSwitch(switches::kXWalkDisableExtensionProcess)) {
     CreateExtensionProcessHost(host, data, runtime_variables.Pass());
   } else if (!external_extensions_path_.empty()) {
@@ -477,11 +477,6 @@ bool XWalkExtensionService::OnRegisterPermissions(
   CHECK(delegate_);
   return delegate_->RegisterPermissions(render_process_id,
                                         extension_name, perm_table);
-}
-
-void XWalkExtensionService::OnRenderChannelCreated(int render_process_id) {
-  CHECK(delegate_);
-  delegate_->RenderChannelCreated(render_process_id);
 }
 
 }  // namespace extensions

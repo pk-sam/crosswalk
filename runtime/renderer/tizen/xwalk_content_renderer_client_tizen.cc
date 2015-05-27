@@ -9,6 +9,7 @@
 
 #include "base/files/file_path.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
 #include "net/base/filename_util.h"
 #include "net/base/net_errors.h"
 #include "url/gurl.h"
@@ -16,6 +17,8 @@
 #include "third_party/WebKit/public/platform/WebURLError.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
+#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/WebKit/public/web/WebScriptSource.h"
 
 namespace xwalk {
 

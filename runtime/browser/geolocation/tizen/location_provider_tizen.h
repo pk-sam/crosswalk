@@ -23,14 +23,14 @@ namespace xwalk {
 class LocationProviderTizen : public content::LocationProviderBase {
  public:
   LocationProviderTizen();
-  virtual ~LocationProviderTizen();
+  ~LocationProviderTizen() override;
 
   // LocationProvider.
-  virtual bool StartProvider(bool high_accuracy) OVERRIDE;
-  virtual void StopProvider() OVERRIDE;
-  virtual void GetPosition(content::Geoposition* position) OVERRIDE;
-  virtual void RequestRefresh() OVERRIDE;
-  virtual void OnPermissionGranted() OVERRIDE;
+  bool StartProvider(bool high_accuracy) override;
+  void StopProvider() override;
+  void GetPosition(content::Geoposition* position) override;
+  void RequestRefresh() override;
+  void OnPermissionGranted() override;
 
  private:
   bool InitLocationManager();

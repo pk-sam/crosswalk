@@ -48,7 +48,7 @@ class XWalkExtensionAndroid : public XWalkExtension {
  public:
   XWalkExtensionAndroid(JNIEnv* env, jobject obj, jstring name,
                         jstring js_api, jobjectArray js_entry_ports);
-  virtual ~XWalkExtensionAndroid();
+  ~XWalkExtensionAndroid() override;
 
   // JNI interface to post message from Java to JS
   void PostMessage(JNIEnv* env, jobject obj, jint instance, jstring msg);
@@ -56,7 +56,7 @@ class XWalkExtensionAndroid : public XWalkExtension {
 
   void DestroyExtension(JNIEnv* env, jobject obj);
 
-  virtual XWalkExtensionInstance* CreateInstance() OVERRIDE;
+  XWalkExtensionInstance* CreateInstance() override;
 
   void RemoveInstance(int instance);
 
@@ -96,8 +96,8 @@ class XWalkExtensionAndroidInstance : public XWalkExtensionInstance {
   }
 
  private:
-  virtual void HandleMessage(scoped_ptr<base::Value> msg) OVERRIDE;
-  virtual void HandleSyncMessage(scoped_ptr<base::Value> msg) OVERRIDE;
+  void HandleMessage(scoped_ptr<base::Value> msg) override;
+  void HandleSyncMessage(scoped_ptr<base::Value> msg) override;
 
   XWalkExtensionAndroid* extension_;
   // Hold a refenerence to Java-side XWalkExtensionAndroid object.

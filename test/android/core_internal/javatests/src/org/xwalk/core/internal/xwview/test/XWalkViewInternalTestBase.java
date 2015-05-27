@@ -9,20 +9,28 @@ import android.app.Activity;
 import android.content.Context;
 import android.test.ActivityInstrumentationTestCase2;
 import android.util.Log;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.webkit.WebResourceResponse;
+import android.widget.FrameLayout;
 
 import java.io.InputStream;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.Callable;
 import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.TimeUnit;
 
 import junit.framework.Assert;
 
+import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.browser.test.util.CallbackHelper;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.ui.gfx.DeviceDisplayInfo;
 
 import org.xwalk.core.internal.XWalkNavigationHistoryInternal;
 import org.xwalk.core.internal.XWalkNavigationItemInternal;
@@ -30,10 +38,15 @@ import org.xwalk.core.internal.XWalkResourceClientInternal;
 import org.xwalk.core.internal.XWalkSettings;
 import org.xwalk.core.internal.XWalkUIClientInternal;
 import org.xwalk.core.internal.XWalkViewInternal;
+import org.xwalk.core.internal.XWalkWebChromeClient;
+
+import static org.chromium.base.test.util.ScalableTimeout.scaleTimeout;
 
 public class XWalkViewInternalTestBase
        extends ActivityInstrumentationTestCase2<XWalkViewInternalTestRunnerActivity> {
     protected final static int WAIT_TIMEOUT_SECONDS = 15;
+    private static final long WAIT_TIMEOUT_MS = scaleTimeout(15000);
+    private static final int CHECK_INTERVAL = 100;
     private final static String TAG = "XWalkViewInternalTestBase";
     private XWalkViewInternal mXWalkViewInternal;
     final TestHelperBridge mTestHelperBridge = new TestHelperBridge();
@@ -98,6 +111,61 @@ public class XWalkViewInternalTestBase
         }
     }
 
+    class TestXWalkWebChromeClientBase extends XWalkWebChromeClient {
+        private CallbackHelper mOnShowCustomViewCallbackHelper = new CallbackHelper();
+        private CallbackHelper mOnHideCustomViewCallbackHelper = new CallbackHelper();
+
+        private Activity mActivity = getActivity();
+        private View mCustomView;
+        private XWalkWebChromeClient.CustomViewCallback mExitCallback;
+
+        public TestXWalkWebChromeClientBase() {
+            super(mXWalkViewInternal);
+        }
+
+        @Override
+        public void onShowCustomView(View view, XWalkWebChromeClient.CustomViewCallback callback) {
+            mCustomView = view;
+            mExitCallback = callback;
+            mActivity.getWindow().setFlags(
+                    WindowManager.LayoutParams.FLAG_FULLSCREEN,
+                    WindowManager.LayoutParams.FLAG_FULLSCREEN);
+
+            mActivity.getWindow().addContentView(view,
+                    new FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            Gravity.CENTER));
+            mOnShowCustomViewCallbackHelper.notifyCalled();
+        }
+
+        @Override
+        public void onHideCustomView() {
+            mActivity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+            mOnHideCustomViewCallbackHelper.notifyCalled();
+        }
+
+        public XWalkWebChromeClient.CustomViewCallback getExitCallback() {
+            return mExitCallback;
+        }
+
+        public View getCustomView() {
+            return mCustomView;
+        }
+
+        public boolean wasCustomViewShownCalled() {
+            return mOnShowCustomViewCallbackHelper.getCallCount() > 0;
+        }
+
+        public void waitForCustomViewShown() throws TimeoutException, InterruptedException {
+            mOnShowCustomViewCallbackHelper.waitForCallback(0, 1, WAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        }
+
+        public void waitForCustomViewHidden() throws InterruptedException, TimeoutException {
+            mOnHideCustomViewCallbackHelper.waitForCallback(0, 1, WAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        }
+    }
+
     void setUIClient(final XWalkUIClientInternal client) {
         getInstrumentation().runOnMainSync(new Runnable() {
             @Override
@@ -112,6 +180,15 @@ public class XWalkViewInternalTestBase
             @Override
             public void run() {
                 getXWalkView().setResourceClient(client);
+            }
+        });
+    }
+
+    void setXWalkWebChromeClient(final TestXWalkWebChromeClientBase client) {
+        getInstrumentation().runOnMainSync(new Runnable() {
+            @Override
+            public void run() {
+                mXWalkViewInternal.setXWalkWebChromeClient(client);
             }
         });
     }
@@ -352,7 +429,7 @@ public class XWalkViewInternalTestBase
         int currentCallCount = getTitleHelper.getCallCount();
         String fileContent = getFileContent(fileName);
 
-        loadDataSync(fileName, fileContent, "text/html", false);
+        loadDataAsync(fileName, fileContent, "text/html", false);
 
         getTitleHelper.waitForCallback(currentCallCount, 1, WAIT_TIMEOUT_SECONDS,
                 TimeUnit.SECONDS);
@@ -541,5 +618,136 @@ public class XWalkViewInternalTestBase
                 return mXWalkViewInternal.getXWalkVersion();
             }
         });
+    }
+
+    protected ContentViewCore getContentViewCore() throws Exception {
+        return runTestOnUiThreadAndGetResult(new Callable<ContentViewCore>() {
+            @Override
+            public ContentViewCore call() throws Exception {
+                return mXWalkViewInternal.getXWalkContentForTest();
+            }
+        });
+    }
+
+    protected void zoomByOnUiThreadAndWait(final float delta) throws Throwable {
+        final float previousScale = getPixelScaleOnUiThread();
+        getInstrumentation().runOnMainSync(new Runnable() {
+            @Override
+            public void run() {
+                mXWalkViewInternal.zoomBy(delta);
+            }
+        });
+        // The zoom level is updated asynchronously.
+        waitForScaleChange(previousScale);
+    }
+
+    protected void waitForScaleChange(final float previousScale) throws Throwable {
+        poll(new Callable<Boolean>() {
+            @Override
+            public Boolean call() throws Exception {
+                return previousScale != getPixelScaleOnUiThread();
+            }
+        });
+    }
+
+    protected void waitForScaleToBecome(final float expectedScale) throws Throwable {
+        poll(new Callable<Boolean>() {
+            @Override
+            public Boolean call() throws Exception {
+                return expectedScale == getScaleOnUiThread();
+            }
+        });
+    }
+
+    /**
+     * Returns pure page scale.
+     */
+    protected float getScaleOnUiThread() throws Exception {
+        final ContentViewCore contentViewCore = getContentViewCore();
+        return runTestOnUiThreadAndGetResult(new Callable<Float>() {
+            @Override
+            public Float call() throws Exception {
+                return contentViewCore.getScale();
+            }
+        });
+    }
+
+    /**
+     * Returns page scale multiplied by the screen density.
+     */
+    protected float getPixelScaleOnUiThread() throws Exception {
+        final ContentViewCore contentViewCore = getContentViewCore();
+        final double dipScale = DeviceDisplayInfo.create(getActivity()).getDIPScale();
+        return runTestOnUiThreadAndGetResult(new Callable<Float>() {
+            @Override
+            public Float call() throws Exception {
+                float pixelScale = contentViewCore.getScale() * (float)dipScale;
+                return pixelScale;
+            }
+        });
+    }
+
+    /**
+     * Returns whether a user can zoom the page in.
+     */
+    protected boolean canZoomInOnUiThread() throws Exception {
+        final ContentViewCore contentViewCore = getContentViewCore();
+        return runTestOnUiThreadAndGetResult(new Callable<Boolean>() {
+            @Override
+            public Boolean call() throws Exception {
+                return mXWalkViewInternal.canZoomIn();
+            }
+        });
+    }
+
+    /**
+     * Returns whether a user can zoom the page out.
+     */
+    protected boolean canZoomOutOnUiThread() throws Exception {
+        final ContentViewCore contentViewCore = getContentViewCore();
+        return runTestOnUiThreadAndGetResult(new Callable<Boolean>() {
+            @Override
+            public Boolean call() throws Exception {
+                return mXWalkViewInternal.canZoomOut();
+            }
+        });
+    }
+
+    protected void zoomInOnUiThreadAndWait() throws Throwable {
+        final float previousScale = getPixelScaleOnUiThread();
+        assertTrue(runTestOnUiThreadAndGetResult(new Callable<Boolean>() {
+            @Override
+            public Boolean call() throws Exception {
+                return mXWalkViewInternal.zoomIn();
+            }
+        }));
+        // The zoom level is updated asynchronously.
+        waitForScaleChange(previousScale);
+    }
+
+    protected void zoomOutOnUiThreadAndWait() throws Throwable {
+        final float previousScale = getPixelScaleOnUiThread();
+        assertTrue(runTestOnUiThreadAndGetResult(new Callable<Boolean>() {
+            @Override
+            public Boolean call() throws Exception {
+                return mXWalkViewInternal.zoomOut();
+            }
+        }));
+        // The zoom level is updated asynchronously.
+        waitForScaleChange(previousScale);
+    }
+
+    protected void poll(final Callable<Boolean> callable) throws Exception {
+        assertTrue(CriteriaHelper.pollForCriteria(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                try {
+                    return callable.call();
+                } catch (Throwable e) {
+                    Log.e(TAG, "Exception while polling.", e);
+                    return false;
+                }
+            }
+        }, WAIT_TIMEOUT_MS, CHECK_INTERVAL));
     }
 }

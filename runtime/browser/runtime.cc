@@ -10,19 +10,9 @@
 #include "base/command_line.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
-#include "xwalk/runtime/browser/image_util.h"
-#include "xwalk/runtime/browser/media/media_capture_devices_dispatcher.h"
-#include "xwalk/runtime/browser/runtime_context.h"
-#include "xwalk/runtime/browser/runtime_file_select_helper.h"
-#include "xwalk/runtime/browser/ui/color_chooser.h"
-#include "xwalk/runtime/browser/xwalk_runner.h"
-#include "xwalk/runtime/common/xwalk_notification_types.h"
-#include "xwalk/runtime/common/xwalk_switches.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
-#include "content/public/browser/notification_source.h"
-#include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -31,6 +21,14 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/native_widget_types.h"
+#include "xwalk/runtime/browser/image_util.h"
+#include "xwalk/runtime/browser/media/media_capture_devices_dispatcher.h"
+#include "xwalk/runtime/browser/runtime_file_select_helper.h"
+#include "xwalk/runtime/browser/ui/color_chooser.h"
+#include "xwalk/runtime/browser/xwalk_browser_context.h"
+#include "xwalk/runtime/browser/xwalk_runner.h"
+#include "xwalk/runtime/common/xwalk_notification_types.h"
+#include "xwalk/runtime/common/xwalk_switches.h"
 
 #if defined(OS_TIZEN)
 #include "content/public/browser/site_instance.h"
@@ -40,7 +38,7 @@
 #endif
 
 #if !defined(OS_ANDROID)
-#include "xwalk/runtime/browser/runtime_ui_strategy.h"
+#include "xwalk/runtime/browser/runtime_ui_delegate.h"
 #endif
 
 using content::FaviconURL;
@@ -49,52 +47,31 @@ using content::WebContents;
 namespace xwalk {
 
 // static
-Runtime* Runtime::Create(RuntimeContext* runtime_context,
-                         Observer* observer,
+Runtime* Runtime::Create(XWalkBrowserContext* browser_context,
                          content::SiteInstance* site) {
-  WebContents::CreateParams params(runtime_context, site);
+  WebContents::CreateParams params(browser_context, site);
   params.routing_id = MSG_ROUTING_NONE;
   WebContents* web_contents = WebContents::Create(params);
 
-  return new Runtime(web_contents, observer);
+  return new Runtime(web_contents);
 }
 
-Runtime::Runtime(content::WebContents* web_contents, Observer* observer)
+Runtime::Runtime(content::WebContents* web_contents)
     : WebContentsObserver(web_contents),
       web_contents_(web_contents),
-      window_(NULL),
-      weak_ptr_factory_(this),
       fullscreen_options_(NO_FULLSCREEN),
-      remote_debugging_enabled_(false),
-      observer_(observer) {
+      ui_delegate_(nullptr),
+      observer_(nullptr),
+      weak_ptr_factory_(this) {
   web_contents_->SetDelegate(this);
-  content::NotificationService::current()->Notify(
-       xwalk::NOTIFICATION_RUNTIME_OPENED,
-       content::Source<Runtime>(this),
-       content::NotificationService::NoDetails());
-  if (observer_)
-    observer_->OnRuntimeAdded(this);
-}
-
-Runtime::~Runtime() {
-  content::NotificationService::current()->Notify(
-          xwalk::NOTIFICATION_RUNTIME_CLOSED,
-          content::Source<Runtime>(this),
-          content::NotificationService::NoDetails());
-  if (observer_)
-    observer_->OnRuntimeRemoved(this);
-}
-
-void Runtime::EnableTitleUpdatedNotification() {
   registrar_.Add(this,
                  content::NOTIFICATION_WEB_CONTENTS_TITLE_UPDATED,
                  content::Source<content::WebContents>(web_contents_.get()));
 }
 
-void Runtime::set_app_icon(const gfx::Image& app_icon) {
-  app_icon_ = app_icon;
-  if (window_ && !app_icon_.IsEmpty())
-    window_->UpdateIcon(app_icon_);
+Runtime::~Runtime() {
+  if (ui_delegate_)
+    ui_delegate_->DeleteDelegate();
 }
 
 void Runtime::LoadURL(const GURL& url) {
@@ -106,14 +83,39 @@ void Runtime::LoadURL(const GURL& url) {
   web_contents_->Focus();
 }
 
+void Runtime::Show() {
+  if (ui_delegate_)
+    ui_delegate_->Show();
+}
+
 void Runtime::Close() {
-  if (window_) {
-    window_->Close();
-    return;
-  }
-  // Runtime should not free itself on Close but be owned
-  // by Application.
-  delete this;
+  web_contents_->Close();
+}
+
+void Runtime::Back() {
+  web_contents_->GetController().GoToOffset(-1);
+  web_contents_->Focus();
+}
+
+void Runtime::Forward() {
+  web_contents_->GetController().GoToOffset(1);
+  web_contents_->Focus();
+}
+
+void Runtime::Reload() {
+  web_contents_->GetController().Reload(false);
+  web_contents_->Focus();
+}
+
+void Runtime::Stop() {
+  web_contents_->Stop();
+  web_contents_->Focus();
+}
+
+NativeAppWindow* Runtime::window() {
+  if (ui_delegate_)
+    return ui_delegate_->GetAppWindow();
+  return nullptr;
 }
 
 content::RenderProcessHost* Runtime::GetRenderProcessHost() {
@@ -150,18 +152,17 @@ void Runtime::LoadingStateChanged(content::WebContents* source,
                                   bool to_different_document) {
 }
 
-void Runtime::ToggleFullscreenModeForTab(content::WebContents* web_contents,
-                                         bool enter_fullscreen) {
-  if (enter_fullscreen)
-    fullscreen_options_ |= FULLSCREEN_FOR_TAB;
-  else
-    fullscreen_options_ &= ~FULLSCREEN_FOR_TAB;
+void Runtime::EnterFullscreenModeForTab(content::WebContents* web_contents,
+                                        const GURL&) {
+  fullscreen_options_ |= FULLSCREEN_FOR_TAB;
+  if (ui_delegate_)
+    ui_delegate_->SetFullscreen(true);
+}
 
-  if (enter_fullscreen) {
-    window_->SetFullscreen(true);
-  } else if (!fullscreen_options_ & FULLSCREEN_FOR_LAUNCH) {
-    window_->SetFullscreen(false);
-  }
+void Runtime::ExitFullscreenModeForTab(content::WebContents* web_contents) {
+  fullscreen_options_ &= ~FULLSCREEN_FOR_TAB;
+  if (ui_delegate_)
+    ui_delegate_->SetFullscreen(false);
 }
 
 bool Runtime::IsFullscreenForTabOrPending(
@@ -176,7 +177,11 @@ void Runtime::RequestToLockMouse(content::WebContents* web_contents,
 }
 
 void Runtime::CloseContents(content::WebContents* source) {
-  window_->Close();
+  if (ui_delegate_)
+    ui_delegate_->Close();
+
+  if (observer_)
+    observer_->OnRuntimeClosed(this);
 }
 
 bool Runtime::CanOverscrollContent() const {
@@ -189,7 +194,7 @@ bool Runtime::PreHandleKeyboardEvent(
       bool* is_keyboard_shortcut) {
   // Escape exits tabbed fullscreen mode.
   if (event.windowsKeyCode == 27 && IsFullscreenForTabOrPending(source)) {
-    ToggleFullscreenModeForTab(source, false);
+    ExitFullscreenModeForTab(source);
     return true;
   }
   return false;
@@ -206,14 +211,20 @@ void Runtime::WebContentsCreated(
     const base::string16& frame_name,
     const GURL& target_url,
     content::WebContents* new_contents) {
-  new Runtime(new_contents, observer_);
+  if (observer_)
+    observer_->OnNewRuntimeAdded(new Runtime(new_contents));
+  else
+    LOG(WARNING) << "New web contents is left unhandled.";
 }
 
 void Runtime::DidNavigateMainFramePostCommit(
     content::WebContents* web_contents) {
+  if (ui_delegate_)
+    ui_delegate_->SetAddressURL(web_contents->GetLastCommittedURL());
 }
 
-content::JavaScriptDialogManager* Runtime::GetJavaScriptDialogManager() {
+content::JavaScriptDialogManager* Runtime::GetJavaScriptDialogManager(
+    content::WebContents* web_contents) {
   return NULL;
 }
 
@@ -229,13 +240,20 @@ content::ColorChooser* Runtime::OpenColorChooser(
     content::WebContents* web_contents,
     SkColor initial_color,
     const std::vector<content::ColorSuggestion>& suggestions) {
+#if defined(TOOLKIT_VIEWS)
   return xwalk::ShowColorChooser(web_contents, initial_color);
+#else
+  return WebContentsDelegate::OpenColorChooser(web_contents,
+                                               initial_color,
+                                               suggestions);
+#endif
 }
 
 void Runtime::RunFileChooser(
     content::WebContents* web_contents,
     const content::FileChooserParams& params) {
-#if defined(USE_AURA) && defined(OS_LINUX)
+#if defined(USE_AURA) && defined(OS_LINUX) && \
+    !defined(USE_WEBUI_FILE_PICKER) && !defined(USE_GTK_UI)
   NOTIMPLEMENTED();
 #else
   RuntimeFileSelectHelper::RunFileChooser(web_contents, params);
@@ -271,6 +289,7 @@ void Runtime::DidUpdateFaviconURL(const std::vector<FaviconURL>& candidates) {
       favicon.icon_url,
       true,  // Is a favicon
       0,     // No maximum size
+      true,  // Normal cache policy
       base::Bind(
           &Runtime::DidDownloadFavicon, weak_ptr_factory_.GetWeakPtr()));
 }
@@ -283,7 +302,8 @@ void Runtime::DidDownloadFavicon(int id,
   if (bitmaps.empty())
     return;
   app_icon_ = gfx::Image::CreateFrom1xBitmap(bitmaps[0]);
-  window_->UpdateIcon(app_icon_);
+  if (ui_delegate_)
+    ui_delegate_->UpdateIcon(app_icon_);
 }
 
 void Runtime::Observe(int type,
@@ -294,17 +314,9 @@ void Runtime::Observe(int type,
         content::Details<std::pair<content::NavigationEntry*, bool> >(
             details).ptr();
 
-    if (title->first) {
-      base::string16 text = title->first->GetTitle();
-      window_->UpdateTitle(text);
-    }
+    if (title->first && ui_delegate_)
+      ui_delegate_->UpdateTitle(title->first->GetTitle());
   }
-}
-
-void Runtime::OnWindowDestroyed() {
-  // Runtime should not free itself on Close but be owned
-  // by Application.
-  delete this;
 }
 
 void Runtime::RequestMediaAccessPermission(
@@ -314,4 +326,20 @@ void Runtime::RequestMediaAccessPermission(
   XWalkMediaCaptureDevicesDispatcher::RunRequestMediaAccessPermission(
       web_contents, request, callback);
 }
+
+bool Runtime::CheckMediaAccessPermission(
+    content::WebContents* web_contents,
+    const GURL& security_origin,
+    content::MediaStreamType type) {
+  // TODO(xiang): Pepper flash plugin will trigger this check a lot, return
+  // false at the moment.
+  return false;
+}
+
+void Runtime::LoadProgressChanged(content::WebContents* source,
+                                  double progress) {
+  if (ui_delegate_)
+    ui_delegate_->SetLoadProgress(progress);
+}
+
 }  // namespace xwalk

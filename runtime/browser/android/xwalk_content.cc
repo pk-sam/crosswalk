@@ -34,8 +34,8 @@
 #include "xwalk/runtime/browser/android/xwalk_contents_client_bridge_base.h"
 #include "xwalk/runtime/browser/android/xwalk_contents_io_thread_client_impl.h"
 #include "xwalk/runtime/browser/android/xwalk_web_contents_delegate.h"
-#include "xwalk/runtime/browser/runtime_context.h"
 #include "xwalk/runtime/browser/runtime_resource_dispatcher_host_delegate_android.h"
+#include "xwalk/runtime/browser/xwalk_browser_context.h"
 #include "xwalk/runtime/browser/xwalk_runner.h"
 #include "jni/XWalkContent_jni.h"
 
@@ -174,10 +174,13 @@ void XWalkContent::SetJavaPeers(JNIEnv* env,
   render_view_host_ext_.reset(new XWalkRenderViewHostExt(web_contents_.get()));
 }
 
-jlong XWalkContent::GetWebContents(JNIEnv* env, jobject obj) {
+base::android::ScopedJavaLocalRef<jobject>
+XWalkContent::GetWebContents(JNIEnv* env, jobject obj) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
   DCHECK(web_contents_);
-  return reinterpret_cast<intptr_t>(web_contents_.get());
+  if (!web_contents_)
+    return base::android::ScopedJavaLocalRef<jobject>();
+  return web_contents_->GetJavaWebContents();
 }
 
 void XWalkContent::SetPendingWebContentsForPopup(
@@ -283,23 +286,24 @@ jboolean XWalkContent::SetManifest(JNIEnv* env,
 
   std::string csp;
   ManifestGetString(manifest, keys::kCSPKey, keys::kDeprecatedCSPKey, &csp);
-  RuntimeContext* runtime_context =
-      XWalkRunner::GetInstance()->runtime_context();
-  CHECK(runtime_context);
-  runtime_context->SetCSPString(csp);
+  XWalkBrowserContext* browser_context =
+      XWalkRunner::GetInstance()->browser_context();
+  CHECK(browser_context);
+  browser_context->SetCSPString(csp);
 
   ScopedJavaLocalRef<jstring> url_buffer =
       base::android::ConvertUTF8ToJavaString(env, url);
 
   if (manifest.HasPath(kDisplay)) {
     std::string display_string;
-    manifest.GetString(kDisplay, &display_string);
-    // TODO(David): update the handling process of the display strings
-    // including fullscreen etc.
-    bool display_as_fullscreen = (
-        display_string.find("fullscreen") != std::string::npos);
-    Java_XWalkContent_onGetFullscreenFlagFromManifest(
-        env, obj, display_as_fullscreen ? JNI_TRUE : JNI_FALSE);
+    if (manifest.GetString(kDisplay, &display_string)) {
+      // TODO(David): update the handling process of the display strings
+      // including fullscreen etc.
+      bool display_as_fullscreen =
+          LowerCaseEqualsASCII(display_string, "fullscreen");
+      Java_XWalkContent_onGetFullscreenFlagFromManifest(
+          env, obj, display_as_fullscreen ? JNI_TRUE : JNI_FALSE);
+    }
   }
 
   // Check whether need to display launch screen. (Read from manifest.json)
@@ -408,7 +412,7 @@ jboolean XWalkContent::SetState(JNIEnv* env, jobject obj, jbyteArray state) {
 static jlong Init(JNIEnv* env, jobject obj) {
   scoped_ptr<WebContents> web_contents(content::WebContents::Create(
       content::WebContents::CreateParams(
-          XWalkRunner::GetInstance()->runtime_context())));
+          XWalkRunner::GetInstance()->browser_context())));
   return reinterpret_cast<intptr_t>(new XWalkContent(web_contents.Pass()));
 }
 

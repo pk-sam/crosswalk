@@ -19,12 +19,12 @@ class TizenSystemIndicatorWidget : public views::Widget,
     public TizenSystemIndicatorWatcher::WatcherClient {
  public:
   TizenSystemIndicatorWidget();
-  virtual ~TizenSystemIndicatorWidget();
+  ~TizenSystemIndicatorWidget() override;
 
   void Initialize(aura::Window* parent);
 
   // TizenSystemIndicatorWatcher::WatcherClient implementation.
-  virtual void OnImageUpdated(const gfx::ImageSkia& img_skia) OVERRIDE;
+  void OnImageUpdated(const gfx::ImageSkia& img_skia) override;
 
   // Apply new display configuration.
   void SetDisplay(const gfx::Display& display);

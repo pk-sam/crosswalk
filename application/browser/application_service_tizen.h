@@ -18,15 +18,14 @@ class ApplicationStorage;
 // The application service manages launch and termination of the applications.
 class ApplicationServiceTizen : public ApplicationService {
  public:
-  virtual ~ApplicationServiceTizen();
+  ~ApplicationServiceTizen() override;
   // Launch an installed application using application id.
-  Application* LaunchFromAppID(
-      const std::string& id,
-      const Application::LaunchParams& params = Application::LaunchParams());
+  Application* LaunchFromAppID(const std::string& id,
+      const std::string& encoded_bundle = std::string());
 
  private:
   friend class ApplicationService;
-  explicit ApplicationServiceTizen(RuntimeContext* runtime_context);
+  explicit ApplicationServiceTizen(XWalkBrowserContext* browser_context);
   // Note : do not export app storage from this class! We need consider
   // making ApplicationSystemTizen (owning the storage) instead.
   scoped_ptr<ApplicationStorage> application_storage_;

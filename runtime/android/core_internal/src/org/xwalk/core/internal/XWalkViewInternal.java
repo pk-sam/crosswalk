@@ -36,7 +36,11 @@ import java.util.Date;
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ApplicationStatus.ActivityStateListener;
+import org.chromium.base.ApplicationStatusManager;
 import org.chromium.base.CommandLine;
+import org.chromium.content.browser.ContentViewCore;
+import org.chromium.net.NetworkChangeNotifier;
+
 import org.xwalk.core.internal.extension.BuiltinXWalkExtensions;
 
 /**
@@ -154,6 +158,9 @@ public class XWalkViewInternal extends android.widget.FrameLayout {
     static final String PLAYSTORE_DETAIL_URI = "market://details?id=";
     public static final int INPUT_FILE_REQUEST_CODE = 1;
     private static final String TAG = XWalkViewInternal.class.getSimpleName();
+    private static final String PATH_PREFIX = "file:";
+
+    private static boolean sInitialized = false;
 
     private XWalkContent mContent;
     private Activity mActivity;
@@ -185,7 +192,6 @@ public class XWalkViewInternal extends android.widget.FrameLayout {
     @XWalkAPI(preWrapperLines = {
                   "        super(${param1}, ${param2});"},
               postWrapperLines = {
-                  "        if (bridge == null) return;",
                   "        addView((FrameLayout)bridge, new FrameLayout.LayoutParams(",
                   "                FrameLayout.LayoutParams.MATCH_PARENT,",
                   "                FrameLayout.LayoutParams.MATCH_PARENT));"})
@@ -195,7 +201,9 @@ public class XWalkViewInternal extends android.widget.FrameLayout {
         checkThreadSafety();
         mActivity = (Activity) context;
         mContext = getContext();
-        init(mContext, attrs);
+
+        init(getContext(), getActivity());
+        initXWalkContent(mContext, attrs);
     }
 
     /**
@@ -208,7 +216,6 @@ public class XWalkViewInternal extends android.widget.FrameLayout {
     @XWalkAPI(preWrapperLines = {
                   "        super(${param1}, null);"},
               postWrapperLines = {
-                  "        if (bridge == null) return;",
                   "        addView((FrameLayout)bridge, new FrameLayout.LayoutParams(",
                   "                FrameLayout.LayoutParams.MATCH_PARENT,",
                   "                FrameLayout.LayoutParams.MATCH_PARENT));"})
@@ -219,12 +226,17 @@ public class XWalkViewInternal extends android.widget.FrameLayout {
         // Make sure mActivity is initialized before calling 'init' method.
         mActivity = activity;
         mContext = getContext();
-        init(mContext, null);
+
+        init(getContext(), getActivity());
+        initXWalkContent(mContext, null);
     }
 
     private static Context convertContext(Context context) {
         Context ret = context;
-        Context bridgeContext = ReflectionHelper.getBridgeContext();
+        Context bridgeContext = null;
+        if (XWalkCoreBridge.getInstance() != null) {
+            bridgeContext = XWalkCoreBridge.getInstance().getContext();
+        }
         if (bridgeContext == null || context == null ||
                 bridgeContext.getPackageName().equals(context.getPackageName())) {
             // Not acrossing package
@@ -233,6 +245,29 @@ public class XWalkViewInternal extends android.widget.FrameLayout {
             ret = new MixedContext(bridgeContext, context);
         }
         return ret;
+    }
+
+    private static void init(Context context, Activity activity) {
+        if (sInitialized) return;
+
+        XWalkViewDelegate.loadXWalkLibrary(null);
+
+        // Initialize the ActivityStatus. This is needed and used by many internal
+        // features such as location provider to listen to activity status.
+        ApplicationStatusManager.init(activity.getApplication());
+
+        // Auto detect network connectivity state.
+        // setAutoDetectConnectivityState() need to be called before activity started.
+        NetworkChangeNotifier.init(activity);
+        NetworkChangeNotifier.setAutoDetectConnectivityState(true);
+
+        // We will miss activity onCreate() status in ApplicationStatusManager,
+        // informActivityStarted() will simulate these callbacks.
+        ApplicationStatusManager.informActivityStarted(activity);
+
+        XWalkViewDelegate.init(context);
+
+        sInitialized = true;
     }
 
     /**
@@ -265,92 +300,11 @@ public class XWalkViewInternal extends android.widget.FrameLayout {
         mContent.supplyContentsForPopup(newXWalkView == null ? null : newXWalkView.mContent);
     }
 
-    private void init(Context context, AttributeSet attrs) {
-        // Initialize chromium resources. Assign them the correct ids in
-        // xwalk core.
-        XWalkInternalResources.resetIds(context);
-
-        // Intialize library, paks and others.
-        try {
-            XWalkViewDelegate.init(this);
-            mActivityStateListener = new XWalkActivityStateListener(this);
-            ApplicationStatus.registerStateListenerForActivity(
-                    mActivityStateListener, getActivity());
-        } catch (Throwable e) {
-            // Try to find if there is UnsatisfiedLinkError in the cause chain of the met Throwable.
-            Throwable linkError = e;
-            while (true) {
-                if (linkError == null) throw new RuntimeException(e);
-                if (linkError instanceof UnsatisfiedLinkError) break;
-                if (linkError.getCause() == null ||
-                        linkError.getCause().equals(linkError)) {
-                    throw new RuntimeException(e);
-                }
-                linkError = linkError.getCause();
-            }
-            final UnsatisfiedLinkError err = (UnsatisfiedLinkError) linkError;
-            final Activity activity = getActivity();
-            final String packageName = context.getPackageName();
-            String missingArch = XWalkViewDelegate.isRunningOnIA() ? "Intel" : "ARM";
-            final String message =
-                    context.getString(R.string.cpu_arch_mismatch_message, missingArch);
-
-            AlertDialog.Builder builder = new AlertDialog.Builder(activity);
-            builder.setTitle(R.string.cpu_arch_mismatch_title)
-                    .setMessage(message)
-                    .setOnCancelListener(new DialogInterface.OnCancelListener() {
-                        @Override
-                        public void onCancel(DialogInterface dialog) {
-                            activity.finish();
-                        }
-                    }).setPositiveButton(R.string.goto_store_button_label,
-                            new DialogInterface.OnClickListener() {
-                        @Override
-                        public void onClick(DialogInterface dialog, int which) {
-                            activity.startActivity(new Intent(Intent.ACTION_VIEW,
-                                    Uri.parse(PLAYSTORE_DETAIL_URI + packageName)));
-                            activity.finish();
-                        }
-                    }).setNeutralButton(R.string.report_feedback_button_label,
-                            new DialogInterface.OnClickListener() {
-                        @Override
-                        public void onClick(DialogInterface dialog, int which) {
-                            ApplicationErrorReport report = new ApplicationErrorReport();
-                            report.type = ApplicationErrorReport.TYPE_CRASH;
-                            report.packageName = report.processName = packageName;
-
-                            ApplicationErrorReport.CrashInfo crash =
-                                    new ApplicationErrorReport.CrashInfo();
-                            crash.exceptionClassName = err.getClass().getSimpleName();
-                            crash.exceptionMessage = "CPU architecture mismatch";
-                            StringWriter writer = new StringWriter();
-                            PrintWriter print = new PrintWriter(writer);
-                            err.printStackTrace(print);
-                            crash.stackTrace = writer.toString();
-                            StackTraceElement stack = err.getStackTrace()[0];
-                            crash.throwClassName = stack.getClassName();
-                            crash.throwFileName = stack.getFileName();
-                            crash.throwLineNumber = stack.getLineNumber();
-                            crash.throwMethodName = stack.getMethodName();
-
-                            report.crashInfo = crash;
-                            report.systemApp = false;
-                            report.time = System.currentTimeMillis();
-
-                            Intent intent = new Intent(Intent.ACTION_APP_ERROR);
-                            intent.putExtra(Intent.EXTRA_BUG_REPORT, report);
-                            activity.startActivity(intent);
-                            activity.finish();
-                        }
-                    });
-            builder.create().show();
-            return;
-        }
-
-        initXWalkContent(context, attrs);
-    }
-
     private void initXWalkContent(Context context, AttributeSet attrs) {
+        mActivityStateListener = new XWalkActivityStateListener(this);
+        ApplicationStatus.registerStateListenerForActivity(
+            mActivityStateListener, getActivity());
+
         mIsHidden = false;
         mContent = new XWalkContent(context, attrs, this);
         addView(mContent,
@@ -677,7 +631,10 @@ public class XWalkViewInternal extends android.widget.FrameLayout {
                     if (dataString != null) {
                         results = Uri.parse(dataString);
                     }
+                    deleteImageFile();
                 }
+            } else if (Activity.RESULT_CANCELED == resultCode) {
+                deleteImageFile();
             }
 
             mFilePathCallback.onReceiveValue(results);
@@ -735,7 +692,7 @@ public class XWalkViewInternal extends android.widget.FrameLayout {
     // TODO(yongsheng): make it static?
     @XWalkAPI
     public String getAPIVersion() {
-        return "4.1";
+        return "5.0";
     }
 
     /**
@@ -800,6 +757,19 @@ public class XWalkViewInternal extends android.widget.FrameLayout {
         }
     }
 
+     /**
+     * Set the user agent of web page/app.
+     * @param userAgent the user agent string passed from client.
+     * @since 5.0
+     */
+    @XWalkAPI
+    public void setUserAgentString(String userAgent) {
+        XWalkSettings settings = getSettings();
+        if (settings == null) return;
+        checkThreadSafety();
+        settings.setUserAgentString(userAgent);
+    }
+
     // TODO(yongsheng): this is not public.
     /**
      * @hide
@@ -813,8 +783,6 @@ public class XWalkViewInternal extends android.widget.FrameLayout {
     /**
      * This method is used by Cordova for hacking.
      * TODO(yongsheng): remove this and related test cases?
-     *
-     * @hide
      */
     @XWalkAPI
     public void setNetworkAvailable(boolean networkUp) {
@@ -847,6 +815,68 @@ public class XWalkViewInternal extends android.widget.FrameLayout {
         if (wsUrl == null || wsUrl.isEmpty()) return null;
 
         return Uri.parse(wsUrl);
+    }
+
+    /**
+    * Performs zoom in in this XWalkView.
+    * @return true if zoom in succeeds, false if no zoom changes
+    * @since 5.0
+    */
+    @XWalkAPI
+    public boolean zoomIn() {
+        if (mContent == null) return false;
+        checkThreadSafety();
+        return mContent.zoomIn();
+    }
+
+    /**
+    * Performs zoom out in this XWalkView.
+    * @return true if zoom out succeeds, false if no zoom changes
+    * @since 5.0
+    */
+    @XWalkAPI
+    public boolean zoomOut() {
+        if (mContent == null) return false;
+        checkThreadSafety();
+        return mContent.zoomOut();
+    }
+
+    /**
+    * Performs a zoom operation in this XWalkView.
+    * @param zoomFactor the zoom factor to apply.
+    * The zoom factor will be clamped to the XWalkView's zoom limits.
+    * This value must be in the range 0.01 to 100.0 inclusive.
+    * @since 5.0
+    */
+    @XWalkAPI
+    public void zoomBy(float factor) {
+        if (mContent == null) return;
+        checkThreadSafety();
+        mContent.zoomBy(factor);
+    }
+
+    /**
+    * Gets whether this XWalkView can be zoomed in.
+    * @return true if this XWalkView can be zoomed in
+    * @since 5.0
+    */
+    @XWalkAPI
+    public boolean canZoomIn() {
+        if (mContent == null) return false;
+        checkThreadSafety();
+        return mContent.canZoomIn();
+    }
+
+    /**
+    * Gets whether this XWalkView can be zoomed out.
+    * @return true if this XWalkView can be zoomed out
+    * @since 5.0
+    */
+    @XWalkAPI
+    public boolean canZoomOut() {
+        if (mContent == null) return false;
+        checkThreadSafety();
+        return mContent.canZoomOut();
     }
 
     /**
@@ -927,6 +957,18 @@ public class XWalkViewInternal extends android.widget.FrameLayout {
         mContent.setOverlayVideoMode(enabled);
     }
 
+    /**
+    * Control whether the XWalkView's surface is placed on top of its window.
+    * Note this only works when XWalkPreferences.ANIMATABLE_XWALK_VIEW is false.
+    * @param onTop true for on top.
+    * @since 5.0
+    */
+    @XWalkAPI
+    public void setZOrderOnTop(boolean onTop) {
+        if (mContent == null) return;
+        mContent.setZOrderOnTop(onTop);
+    }
+
     // Below methods are for test shell and instrumentation tests.
     /**
      * @hide
@@ -947,9 +989,14 @@ public class XWalkViewInternal extends android.widget.FrameLayout {
     }
 
     /**
-     * @hide
+     * Registers the interface to be used when content can not be handled by
+     * the rendering engine, and should be downloaded instead. This will replace
+     * the current handler.
+     * @param listener an implementation of XWalkDownloadListenerInternal
+     * @since 5.0
      */
-    public void setDownloadListener(DownloadListener listener) {
+    @XWalkAPI
+    public void setDownloadListener(XWalkDownloadListenerInternal listener) {
         if (mContent == null) return;
         checkThreadSafety();
         mContent.setDownloadListener(listener);
@@ -1034,18 +1081,11 @@ public class XWalkViewInternal extends android.widget.FrameLayout {
         Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
         if (takePictureIntent.resolveActivity(getActivity().getPackageManager()) != null) {
             // Create the File where the photo should go
-            File photoFile = null;
-            try {
-                photoFile = createImageFile();
-                takePictureIntent.putExtra("PhotoPath", mCameraPhotoPath);
-            } catch (IOException ex) {
-                // Error occurred while creating the File
-                Log.e(TAG, "Unable to create Image File", ex);
-            }
-
+            File photoFile = createImageFile();
             // Continue only if the File was successfully created
             if (photoFile != null) {
-                mCameraPhotoPath = "file:" + photoFile.getAbsolutePath();
+                mCameraPhotoPath = PATH_PREFIX + photoFile.getAbsolutePath();
+                takePictureIntent.putExtra("PhotoPath", mCameraPhotoPath);
                 takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT,
                         Uri.fromFile(photoFile));
             } else {
@@ -1061,7 +1101,7 @@ public class XWalkViewInternal extends android.widget.FrameLayout {
         Intent soundRecorder = new Intent(
                 MediaStore.Audio.Media.RECORD_SOUND_ACTION);
         ArrayList<Intent> extraIntents = new ArrayList<Intent>();
-        extraIntents.add(takePictureIntent);
+        if (takePictureIntent != null) extraIntents.add(takePictureIntent);
         extraIntents.add(camcorder);
         extraIntents.add(soundRecorder);
 
@@ -1074,17 +1114,41 @@ public class XWalkViewInternal extends android.widget.FrameLayout {
         return true;
     }
 
-    private File createImageFile() throws IOException {
+    private File createImageFile() {
+        // FIXME: If the external storage state is not "MEDIA_MOUNTED", we need to get
+        // other volume paths by "getVolumePaths()" when it was exposed.
+        String state = Environment.getExternalStorageState();
+        if (!state.equals(Environment.MEDIA_MOUNTED)) {
+            Log.e(TAG, "External storage is not mounted.");
+            return null;
+        }
+
         // Create an image file name
         String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
         String imageFileName = "JPEG_" + timeStamp + "_";
         File storageDir = Environment.getExternalStoragePublicDirectory(
                 Environment.DIRECTORY_PICTURES);
-        File imageFile = File.createTempFile(
-                imageFileName,  /* prefix */
-                ".jpg",         /* suffix */
-                storageDir      /* directory */
-        );
-        return imageFile;
+        if (!storageDir.exists()) storageDir.mkdirs();
+        try {
+            return File.createTempFile(imageFileName, ".jpg", storageDir);
+        } catch (IOException ex) {
+            // Error occurred while creating the File
+            Log.e(TAG, "Unable to create Image File", ex);
+        }
+        return null;
+    }
+
+    private boolean deleteImageFile() {
+        if (mCameraPhotoPath == null || !mCameraPhotoPath.contains(PATH_PREFIX)) {
+            return false;
+        }
+        String filePath = mCameraPhotoPath.split(PATH_PREFIX)[1];
+        File file = new File(filePath);
+        return file.delete();
+    }
+
+    // For instrumentation test.
+    public ContentViewCore getXWalkContentForTest() {
+        return mContent.getContentViewCoreForTest();
     }
 }

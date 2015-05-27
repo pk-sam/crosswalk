@@ -4,7 +4,7 @@
 
 #include "xwalk/application/common/application_file_util.h"
 
-#include "base/file_util.h"
+#include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/path_service.h"
@@ -110,8 +110,8 @@ static scoped_refptr<ApplicationData> LoadApplicationManifest(
     ApplicationData::SourceType location,
     int extra_flags,
     std::string* error) {
-  JSONStringValueSerializer serializer(manifest_value);
-  scoped_ptr<base::Value> result(serializer.Deserialize(NULL, error));
+  JSONStringValueDeserializer deserializer(manifest_value);
+  scoped_ptr<base::Value> result(deserializer.Deserialize(NULL, error));
   if (!result.get())
     return NULL;
   CHECK_EQ(base::Value::TYPE_DICTIONARY, result->GetType());

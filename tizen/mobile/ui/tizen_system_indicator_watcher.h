@@ -7,14 +7,14 @@
 #define XWALK_TIZEN_MOBILE_UI_TIZEN_SYSTEM_INDICATOR_WATCHER_H_
 
 #include <string>
-#include "base/file_util.h"
+#include "base/files/file_util.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_pump_libevent.h"
 #include "ui/gfx/display.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image_skia.h"
-#include "ui/gfx/size.h"
 #include "xwalk/tizen/mobile/ui/tizen_plug_message_writer.h"
 
 namespace xwalk {
@@ -34,11 +34,11 @@ class TizenSystemIndicatorWatcher : public base::MessagePumpLibevent::Watcher {
 
   TizenSystemIndicatorWatcher(WatcherClient* client,
                               const gfx::Display& display);
-  virtual ~TizenSystemIndicatorWatcher();
+  ~TizenSystemIndicatorWatcher() override;
 
   // base::MessagePumpLibevent::Watcher implementation.
-  void OnFileCanReadWithoutBlocking(int fd) OVERRIDE;
-  void OnFileCanWriteWithoutBlocking(int fd) OVERRIDE;
+  void OnFileCanReadWithoutBlocking(int fd) override;
+  void OnFileCanWriteWithoutBlocking(int fd) override;
 
   void StartWatching();
   void StopWatching();

@@ -9,7 +9,6 @@
 #include "base/compiler_specific.h"
 #include "content/public/renderer/render_view_observer.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "third_party/WebKit/public/web/WebPermissionClient.h"
 
 namespace blink {
 
@@ -29,14 +28,14 @@ class XWalkRenderViewExt : public content::RenderViewObserver {
 
  private:
   explicit XWalkRenderViewExt(content::RenderView* render_view);
-  virtual ~XWalkRenderViewExt();
+  ~XWalkRenderViewExt() override;
 
   // RenderView::Observer:
-  virtual bool OnMessageReceived(const IPC::Message& message) OVERRIDE;
-  virtual void DidCommitProvisionalLoad(blink::WebLocalFrame* frame,
-                                        bool is_new_navigation) OVERRIDE;
-  virtual void FocusedNodeChanged(const blink::WebNode& node) OVERRIDE;
-  virtual void DidCommitCompositorFrame() OVERRIDE;
+  bool OnMessageReceived(const IPC::Message& message) override;
+  void DidCommitProvisionalLoad(blink::WebLocalFrame* frame,
+                                bool is_new_navigation) override;
+  void FocusedNodeChanged(const blink::WebNode& node) override;
+  void DidCommitCompositorFrame() override;
 
   void OnDocumentHasImagesRequest(int id);
 

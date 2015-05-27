@@ -33,6 +33,10 @@ const char kErrMsgInvalidKeyValue[] =
     "Invalid key value. Key name: ";
 const char kErrMsgMultipleKeys[] =
     "Too many keys found. Key name: ";
+const char kErrMsgNoNamespace[] =
+    "Element pointed by key has no namespace specified. Key name: ";
+const char kErrMsgInvalidNamespace[] =
+    "Invalid namespace of element pointed by key. Key name: ";
 const char kErrMsgAppWidgetInfoNotFound[] =
     "Cannot access app-widget info object.";
 const char kErrMsgApplicationInfoNotFound[] =
@@ -45,10 +49,6 @@ const char kErrMsgInvalidAppWidgetIdBeginning[] =
 const char kErrMsgInvalidAppWidgetIdFormat[] =
     "Invalid format of an id attribute value in app-widget element."
     " The value: ";
-const char kErrMsgNoPrimaryAppWidget[] =
-    "No primary app-widget element (primary='true').";
-const char kErrMsgToManyPrimaryAppWidgets[] =
-    "Too many primary app-widget elements (primary='true').";
 const char kErrMsgUpdatePeriodOutOfDomain[] =
     "Value of an update-period attribute in app-widget element out of domain."
     " The value: ";
@@ -69,16 +69,53 @@ const char kErrMsgContentDropViewHeightOutOfDomain[] =
     "Value of a height attribute in box-content element out of domain."
     " The value: ";
 
+// If the error parameter is specified, it is filled with the given message
+// otherwise it does nothing.
+void SetError(const std::string& message,
+    std::string* error) {
+  if (error)
+    *error = message;
+}
+
+// If the error parameter is specified, it is filled with concatenation
+// of message and arg parameters otherwise it does nothing.
 void SetError(const std::string& message,
     const std::string& arg, std::string* error) {
   if (error)
     *error = message + arg;
 }
 
+// If the error parameter is specified, it is filled with the given message
+// otherwise it does nothing.
+void SetError(const std::string& message,
+    base::string16* error) {
+  if (error)
+    *error = base::ASCIIToUTF16(message);
+}
+
+// If the error parameter is specified, it is filled with concatenation
+// of message and arg parameters otherwise it does nothing.
 void SetError(const std::string& message,
     const std::string& arg, base::string16* error) {
   if (error)
     *error = base::ASCIIToUTF16(message + arg);
+}
+
+// Retrieves a mandatory dictionary from specified manifest and specified key.
+// Returns true, if the ditionary is found or false otherwise. If the error
+// parameter is specified, it is also filled with proper message.
+bool GetMandatoryDictionary(const Manifest& manifest, const std::string& key,
+    const base::DictionaryValue** dict, base::string16* error) {
+  DCHECK(dict);
+  if (!manifest.HasPath(key)) {
+    SetError(kErrMsgNoMandatoryKey, key, error);
+    return false;
+  }
+  if (!manifest.GetDictionary(key, dict) || !*dict) {
+    SetError(kErrMsgInvalidDictionary, key, error);
+    return false;
+  }
+  return true;
 }
 
 // Converts given text value to a value of specific type. Returns true
@@ -132,19 +169,17 @@ bool ConvertValue(const std::string& str_value, double* value) {
 }
 
 // Retrieves a mandatory value from specified dictionary and specified key.
-// Returns true if the value is found or false otherwise. If the error parameter
-// is specified it is also filled with proper message.
+// Returns true, if the value is found or false otherwise. If the error
+// parameter is specified, it is also filled with proper message.
 template <typename ValueType>
 bool GetMandatoryValue(const base::DictionaryValue& dict,
     const std::string& key, ValueType* value, base::string16* error) {
   DCHECK(value);
-
   std::string tmp;
   if (!dict.GetString(key, &tmp)) {
     SetError(kErrMsgNoMandatoryKey, key, error);
     return false;
   }
-
   bool result = ConvertValue(tmp, value);
   if (!result)
     SetError(kErrMsgInvalidKeyValue, key, error);
@@ -152,22 +187,20 @@ bool GetMandatoryValue(const base::DictionaryValue& dict,
 }
 
 // Retrieves an optional value from specified dictionary and specified key.
-// If the value is found the function returns true and fills value
-// parameter. If the value is not found the function returns true and fills
-// value parameter with default value. If an error occurs it returns false
+// If the value is found, the function returns true and fills value
+// parameter. If the value is not found, the function returns true and fills
+// value parameter with default value. If an error occurs, it returns false
 // and fills error parameter if it is set.
 template <typename ValueType>
 bool GetOptionalValue(const base::DictionaryValue& dict,
     const std::string& key, ValueType default_value, ValueType* value,
     base::string16* error) {
   DCHECK(value);
-
   std::string tmp;
   if (!dict.GetString(key, &tmp)) {
     *value = default_value;
     return true;
   }
-
   bool result = ConvertValue(tmp, value);
   if (!result)
     SetError(kErrMsgInvalidKeyValue, key, error);
@@ -180,7 +213,6 @@ bool ParseEachInternal(const base::Value& value, const std::string& key,
     ParseSingleType parse_single, DataContainerType* data_container,
     base::string16* error) {
   DCHECK(data_container);
-
   const base::DictionaryValue* inner_dict;
   if (!value.GetAsDictionary(&inner_dict)) {
     SetError(kErrMsgInvalidDictionary, key, error);
@@ -188,7 +220,6 @@ bool ParseEachInternal(const base::Value& value, const std::string& key,
   }
   if (!parse_single(*inner_dict, key, data_container, error))
     return false;
-
   return true;
 }
 
@@ -230,10 +261,33 @@ bool ParseEach(const base::DictionaryValue& dict, const std::string& key,
   return true;
 }
 
+// Verifies whether specified dictionary represents an element in specified
+// namespace. Returns true, if the namespace is set and equal to the specified
+// one or false otherwise. If the error parameter is specified, it is also
+// filled with proper message.
+bool VerifyElementNamespace(const base::DictionaryValue& dict,
+    const std::string& key, const std::string& desired_namespace_value,
+    base::string16* error) {
+  std::string namespace_value;
+  if (!GetMandatoryValue(dict, keys::kNamespaceKey,
+      &namespace_value, nullptr)) {
+    SetError(kErrMsgNoNamespace, key, error);
+    return false;
+  }
+  if (namespace_value != desired_namespace_value) {
+    SetError(kErrMsgInvalidNamespace, key, error);
+    return false;
+  }
+  return true;
+}
+
 // Parses box-label part
 bool ParseLabel(const base::DictionaryValue& dict,
     const std::string& key, TizenAppWidget* app_widget, base::string16* error) {
   DCHECK(app_widget);
+
+  if (!VerifyElementNamespace(dict, key, keys::kTizenNamespacePrefix, error))
+    return false;
 
   std::string lang;
   if (!GetOptionalValue(dict, keys::kTizenAppWidgetBoxLabelLangKey,
@@ -262,6 +316,9 @@ bool ParseLabel(const base::DictionaryValue& dict,
 bool ParseIcon(const base::DictionaryValue& dict,
     const std::string& key, TizenAppWidget* app_widget, base::string16* error) {
   DCHECK(app_widget);
+
+  if (!VerifyElementNamespace(dict, key, keys::kTizenNamespacePrefix, error))
+    return false;
 
   if (!app_widget->icon_src.empty()) {
     SetError(kErrMsgMultipleKeys, key, error);
@@ -298,6 +355,9 @@ bool ParseContentSizes(const base::DictionaryValue& dict,
     const std::string& key, TizenAppWidget* app_widget, base::string16* error) {
   DCHECK(app_widget);
 
+  if (!VerifyElementNamespace(dict, key, keys::kTizenNamespacePrefix, error))
+    return false;
+
   TizenAppWidgetSize size;
 
   std::string str_type;
@@ -332,6 +392,9 @@ bool ParseContentDropView(const base::DictionaryValue& dict,
     const std::string& key, TizenAppWidget* app_widget, base::string16* error) {
   DCHECK(app_widget);
 
+  if (!VerifyElementNamespace(dict, key, keys::kTizenNamespacePrefix, error))
+    return false;
+
   if (!app_widget->content_drop_view.empty()) {
     SetError(kErrMsgMultipleKeys, key, error);
     return false;
@@ -362,6 +425,9 @@ bool ParseContentDropView(const base::DictionaryValue& dict,
 bool ParseContent(const base::DictionaryValue& dict,
     const std::string& key, TizenAppWidget* app_widget, base::string16* error) {
   DCHECK(app_widget);
+
+  if (!VerifyElementNamespace(dict, key, keys::kTizenNamespacePrefix, error))
+    return false;
 
   if (!app_widget->content_src.empty()) {
     SetError(kErrMsgMultipleKeys, key, error);
@@ -396,6 +462,9 @@ bool ParseAppWidget(const base::DictionaryValue& dict,
     base::string16* error) {
   DCHECK(app_widgets);
 
+  if (!VerifyElementNamespace(dict, key, keys::kTizenNamespacePrefix, error))
+    return false;
+
   TizenAppWidget app_widget;
 
   if (!GetMandatoryValue(dict, keys::kTizenAppWidgetIdKey,
@@ -423,7 +492,7 @@ bool ParseAppWidget(const base::DictionaryValue& dict,
     return false;
 
   if (!ParseEach(dict, keys::kTizenAppWidgetBoxIconKey,
-      true, ParseIcon, &app_widget, error))
+      false, ParseIcon, &app_widget, error))
     return false;
 
   if (!ParseEach(dict, keys::kTizenAppWidgetBoxContentKey,
@@ -463,28 +532,6 @@ bool ValidateEachId(const TizenAppWidgetVector& app_widgets,
   return true;
 }
 
-// Validates all app-widget primary attributes
-bool ValidateEachPrimary(const TizenAppWidgetVector& app_widgets,
-    std::string* error) {
-  int primary_count = 0;
-
-  for (const TizenAppWidget& app_widget : app_widgets)
-    if (app_widget.primary)
-      ++primary_count;
-
-  if (!primary_count) {
-    SetError(kErrMsgNoPrimaryAppWidget, "", error);
-    return false;
-  }
-
-  if (primary_count > 1) {
-    SetError(kErrMsgToManyPrimaryAppWidgets, "", error);
-    return false;
-  }
-
-  return true;
-}
-
 // Tests if specified string represents valid remote url
 bool IsValidUrl(const std::string& value) {
   // TODO(tweglarski): implement me (it's not crucial atm)
@@ -517,7 +564,7 @@ bool ValidateContentSize(const TizenAppWidgetSizeVector& content_size,
   }
 
   if (!mandatory_1x1_found) {
-    SetError(kErrMsgNoMandatoryContentSize1x1, "", error);
+    SetError(kErrMsgNoMandatoryContentSize1x1, error);
     return false;
   }
 
@@ -544,16 +591,9 @@ bool TizenAppWidgetHandler::Parse(scoped_refptr<ApplicationData> application,
   const Manifest* manifest = application->GetManifest();
   DCHECK(manifest);
 
-  if (!manifest->HasPath(keys::kTizenWidgetKey)) {
-    SetError(kErrMsgNoMandatoryKey, keys::kTizenWidgetKey, error);
-    return false;
-  }
-
   const base::DictionaryValue* dict = nullptr;
-  if (!manifest->GetDictionary(keys::kTizenWidgetKey, &dict) || !dict) {
-    SetError(kErrMsgInvalidDictionary, keys::kTizenWidgetKey, error);
+  if (!GetMandatoryDictionary(*manifest, keys::kTizenWidgetKey, &dict, error))
     return false;
-  }
 
   TizenAppWidgetVector app_widgets;
 
@@ -578,20 +618,17 @@ bool TizenAppWidgetHandler::Validate(
           application->GetManifestData(keys::kTizenApplicationKey));
 
   if (!app_widget_info) {
-    SetError(kErrMsgAppWidgetInfoNotFound, "", error);
+    SetError(kErrMsgAppWidgetInfoNotFound, error);
     return false;
   }
   if (!app_info) {
-    SetError(kErrMsgApplicationInfoNotFound, "", error);
+    SetError(kErrMsgApplicationInfoNotFound, error);
     return false;
   }
 
   const TizenAppWidgetVector& app_widgets = app_widget_info->app_widgets();
 
   if (!ValidateEachId(app_widgets, app_info->id(), error))
-    return false;
-
-  if (!ValidateEachPrimary(app_widgets, error))
     return false;
 
   for (const TizenAppWidget& app_widget : app_widgets) {
@@ -604,7 +641,7 @@ bool TizenAppWidgetHandler::Validate(
 
     if (app_widget.label.default_value.empty()
         && app_widget.label.lang_value_map.empty()) {
-      SetError(kErrMsgNoLabel, "", error);
+      SetError(kErrMsgNoLabel, error);
       return false;
     }
 

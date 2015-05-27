@@ -16,7 +16,6 @@
 #include "base/path_service.h"
 #include "xwalk/application/common/id_util.h"
 #include "xwalk/application/common/tizen/application_storage.h"
-#include "xwalk/application/tools/linux/dbus_connection.h"
 #include "xwalk/application/tools/tizen/xwalk_package_installer.h"
 #include "xwalk/application/tools/tizen/xwalk_tizen_user.h"
 #include "xwalk/runtime/common/xwalk_paths.h"
@@ -38,13 +37,13 @@ GOptionEntry entries[] = {
   { "install", 'i', 0, G_OPTION_ARG_STRING, &install_path,
     "Path of the application to be installed/updated", "PATH" },
   { "uninstall", 'd', 0, G_OPTION_ARG_STRING, &uninstall_id,
-    "Uninstall the application with this appid/pkgid", "ID" },
+    "Uninstall the application with this pkgid", "ID" },
   { "continue", 'c' , 0, G_OPTION_ARG_NONE, &continue_tasks,
-    "Continue the previous unfinished tasks.", NULL},
+    "Continue the previous unfinished tasks", NULL},
   { "reinstall", 'r', 0, G_OPTION_ARG_STRING, &reinstall_id,
     "Reinstall the application with this pkgid "
     "(This option is ONLY for SDK to support RDS mode"
-    " (Rapid Development Support).", "ID" },
+    " (Rapid Development Support)", "ID" },
   { "key", 'k', 0, G_OPTION_ARG_STRING, &operation_key,
     "Unique operation key", "KEY" },
   { "quiet", 'q', 0, G_OPTION_ARG_NONE, &quiet,
@@ -64,19 +63,19 @@ int main(int argc, char* argv[]) {
   g_type_init();
 #endif
 
-  if (xwalk_tizen_check_user_for_xwalkctl())
-    exit(1);
+  if (xwalk_tizen_check_user_for_xwalk_backend())
+    return 1;
 
   context = g_option_context_new("- Crosswalk Application Management");
   if (!context) {
     g_print("g_option_context_new failed\n");
-    exit(1);
+    return 1;
   }
   g_option_context_add_main_entries(context, entries, NULL);
   if (!g_option_context_parse(context, &argc, &argv, &error)) {
     g_print("option parsing failed: %s\n", error->message);
     g_option_context_free(context);
-    exit(1);
+    return 1;
   }
 
   g_option_context_free(context);
@@ -105,7 +104,7 @@ int main(int argc, char* argv[]) {
     const base::FilePath& path =
         base::MakeAbsoluteFilePath(base::FilePath(install_path));
     success = installer->Install(path, &app_id);
-    if (!success && storage->Contains(app_id)) {
+    if (!success && !app_id.empty() && storage->Contains(app_id)) {
       g_print("trying to update %s\n", app_id.c_str());
       success = installer->Update(app_id, path);
     }

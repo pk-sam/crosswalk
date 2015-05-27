@@ -14,6 +14,7 @@
 #include "base/time/time.h"
 
 using namespace xwalk::extensions;  // NOLINT
+using xwalk::Runtime;
 
 namespace {
 
@@ -36,22 +37,20 @@ class EchoContext : public XWalkExtensionInstance {
  public:
   EchoContext() {
   }
-  virtual void HandleMessage(scoped_ptr<base::Value> msg) OVERRIDE {
+  void HandleMessage(scoped_ptr<base::Value> msg) override {
     PostMessageToJS(msg.Pass());
   }
-  virtual void HandleSyncMessage(scoped_ptr<base::Value> msg) OVERRIDE {
+  void HandleSyncMessage(scoped_ptr<base::Value> msg) override {
     SendSyncReplyToJS(msg.Pass());
   }
 };
 
 class DelayedEchoContext : public XWalkExtensionInstance {
  public:
-  explicit DelayedEchoContext() {
-  }
-  virtual void HandleMessage(scoped_ptr<base::Value> msg) OVERRIDE {
+  void HandleMessage(scoped_ptr<base::Value> msg) override {
     PostMessageToJS(msg.Pass());
   }
-  virtual void HandleSyncMessage(scoped_ptr<base::Value> msg) OVERRIDE {
+  void HandleSyncMessage(scoped_ptr<base::Value> msg) override {
     base::MessageLoop::current()->PostDelayedTask(
         FROM_HERE, base::Bind(&DelayedEchoContext::DelayedReply,
                               base::Unretained(this), base::Passed(&msg)),
@@ -70,7 +69,7 @@ class EchoExtension : public XWalkExtension {
     set_javascript_api(kEchoAPI);
   }
 
-  virtual XWalkExtensionInstance* CreateInstance() OVERRIDE {
+  XWalkExtensionInstance* CreateInstance() override {
     s_instance_was_created = true;
     return new EchoContext();
   }
@@ -87,7 +86,7 @@ class DelayedEchoExtension : public XWalkExtension {
     set_javascript_api(kEchoAPI);
   }
 
-  virtual XWalkExtensionInstance* CreateInstance() OVERRIDE {
+  XWalkExtensionInstance* CreateInstance() override {
     return new DelayedEchoContext();
   }
 };
@@ -98,7 +97,7 @@ class ExtensionWithInvalidName : public XWalkExtension {
     set_name("invalid name with spaces");
   }
 
-  virtual XWalkExtensionInstance* CreateInstance() OVERRIDE {
+  XWalkExtensionInstance* CreateInstance() override {
     s_instance_was_created = true;
     return NULL;
   }
@@ -125,7 +124,7 @@ class BulkDataContext : public XWalkExtensionInstance {
  public:
   BulkDataContext() {
   }
-  virtual void HandleMessage(scoped_ptr<base::Value> msg) OVERRIDE {
+  void HandleMessage(scoped_ptr<base::Value> msg) override {
     std::string message;
     msg->GetAsString(&message);
     int size = atoi(message.c_str());
@@ -142,7 +141,7 @@ class BulkDataExtension : public XWalkExtension {
     set_javascript_api(kBulkDataAPI);
   }
 
-  virtual XWalkExtensionInstance* CreateInstance() OVERRIDE {
+  XWalkExtensionInstance* CreateInstance() override {
     return new BulkDataContext();
   }
 };
@@ -151,8 +150,8 @@ class BulkDataExtension : public XWalkExtension {
 
 class XWalkExtensionsTest : public XWalkExtensionsTestBase {
  public:
-  virtual void CreateExtensionsForUIThread(
-      XWalkExtensionVector* extensions) OVERRIDE {
+  void CreateExtensionsForUIThread(
+      XWalkExtensionVector* extensions) override {
     extensions->push_back(new EchoExtension);
     extensions->push_back(new ExtensionWithInvalidName);
     extensions->push_back(new BulkDataExtension);
@@ -161,29 +160,29 @@ class XWalkExtensionsTest : public XWalkExtensionsTestBase {
 
 class XWalkExtensionsDelayedTest : public XWalkExtensionsTestBase {
  public:
-  virtual void CreateExtensionsForUIThread(
-      XWalkExtensionVector* extensions) OVERRIDE {
+  void CreateExtensionsForUIThread(
+      XWalkExtensionVector* extensions) override {
     extensions->push_back(new DelayedEchoExtension);
   }
 };
 
 IN_PROC_BROWSER_TEST_F(XWalkExtensionsTest, EchoExtension) {
-  content::RunAllPendingInMessageLoop();
   GURL url = GetExtensionsTestURL(base::FilePath(),
       base::FilePath().AppendASCII("test_extension.html"));
-  content::TitleWatcher title_watcher(runtime()->web_contents(), kPassString);
+  Runtime* runtime = CreateRuntime();
+  content::TitleWatcher title_watcher(runtime->web_contents(), kPassString);
   title_watcher.AlsoWaitForTitle(kFailString);
-  xwalk_test_utils::NavigateToURL(runtime(), url);
+  xwalk_test_utils::NavigateToURL(runtime, url);
   EXPECT_EQ(kPassString, title_watcher.WaitAndGetTitle());
 }
 
 IN_PROC_BROWSER_TEST_F(XWalkExtensionsTest, ExtensionWithInvalidNameIgnored) {
-  content::RunAllPendingInMessageLoop();
+  Runtime* runtime = CreateRuntime();
   GURL url = GetExtensionsTestURL(base::FilePath(),
       base::FilePath().AppendASCII("test_extension.html"));
-  content::TitleWatcher title_watcher(runtime()->web_contents(), kPassString);
+  content::TitleWatcher title_watcher(runtime->web_contents(), kPassString);
   title_watcher.AlsoWaitForTitle(kFailString);
-  xwalk_test_utils::NavigateToURL(runtime(), url);
+  xwalk_test_utils::NavigateToURL(runtime, url);
   EXPECT_EQ(kPassString, title_watcher.WaitAndGetTitle());
 
   EXPECT_TRUE(EchoExtension::s_instance_was_created);
@@ -191,33 +190,33 @@ IN_PROC_BROWSER_TEST_F(XWalkExtensionsTest, ExtensionWithInvalidNameIgnored) {
 }
 
 IN_PROC_BROWSER_TEST_F(XWalkExtensionsTest, EchoExtensionSync) {
-  content::RunAllPendingInMessageLoop();
+  Runtime* runtime = CreateRuntime();
   GURL url = GetExtensionsTestURL(base::FilePath(),
                                   base::FilePath().AppendASCII(
                                       "sync_echo.html"));
-  content::TitleWatcher title_watcher(runtime()->web_contents(), kPassString);
+  content::TitleWatcher title_watcher(runtime->web_contents(), kPassString);
   title_watcher.AlsoWaitForTitle(kFailString);
-  xwalk_test_utils::NavigateToURL(runtime(), url);
+  xwalk_test_utils::NavigateToURL(runtime, url);
   EXPECT_EQ(kPassString, title_watcher.WaitAndGetTitle());
 }
 
 IN_PROC_BROWSER_TEST_F(XWalkExtensionsDelayedTest, EchoExtensionSync) {
-  content::RunAllPendingInMessageLoop();
+  Runtime* runtime = CreateRuntime();
   GURL url = GetExtensionsTestURL(base::FilePath(),
                                   base::FilePath().AppendASCII(
                                       "sync_echo.html"));
-  content::TitleWatcher title_watcher(runtime()->web_contents(), kPassString);
+  content::TitleWatcher title_watcher(runtime->web_contents(), kPassString);
   title_watcher.AlsoWaitForTitle(kFailString);
-  xwalk_test_utils::NavigateToURL(runtime(), url);
+  xwalk_test_utils::NavigateToURL(runtime, url);
   EXPECT_EQ(kPassString, title_watcher.WaitAndGetTitle());
 }
 
 IN_PROC_BROWSER_TEST_F(XWalkExtensionsTest, BulkDataExtension) {
-  content::RunAllPendingInMessageLoop();
+  Runtime* runtime = CreateRuntime();
   GURL url = GetExtensionsTestURL(base::FilePath(),
       base::FilePath().AppendASCII("bulk_data_transmission.html"));
-  content::TitleWatcher title_watcher(runtime()->web_contents(), kPassString);
+  content::TitleWatcher title_watcher(runtime->web_contents(), kPassString);
   title_watcher.AlsoWaitForTitle(kFailString);
-  xwalk_test_utils::NavigateToURL(runtime(), url);
+  xwalk_test_utils::NavigateToURL(runtime, url);
   EXPECT_EQ(kPassString, title_watcher.WaitAndGetTitle());
 }

@@ -8,7 +8,6 @@
 #include <string>
 
 #include "xwalk/runtime/browser/xwalk_runner.h"
-#include "xwalk/runtime/browser/tizen/tizen_locale_listener.h"
 
 namespace xwalk {
 
@@ -21,15 +20,18 @@ class XWalkRunnerTizen : public XWalkRunner {
   // to change and harder to reason about.
   static XWalkRunnerTizen* GetInstance();
 
-  virtual ~XWalkRunnerTizen();
+  ~XWalkRunnerTizen() override;
 
-  virtual void PreMainMessageLoopRun() OVERRIDE;
+  void PreMainMessageLoopRun() override;
+
+ protected:
+  void InitializeRuntimeVariablesForExtensions(
+      const content::RenderProcessHost* host,
+      base::ValueMap* variables) override;
 
  private:
   friend class XWalkRunner;
   XWalkRunnerTizen();
-
-  TizenLocaleListener tizen_locale_listener_;
 };
 
 }  // namespace xwalk

@@ -48,11 +48,11 @@ class XWalkExtensionServer : public IPC::Listener,
     public base::SupportsWeakPtr<XWalkExtensionServer> {
  public:
   XWalkExtensionServer();
-  virtual ~XWalkExtensionServer();
+  ~XWalkExtensionServer() override;
 
   // IPC::Listener Implementation.
-  virtual bool OnMessageReceived(const IPC::Message& message) OVERRIDE;
-  virtual void OnChannelConnected(int32 peer_pid) OVERRIDE;
+  bool OnMessageReceived(const IPC::Message& message) override;
+  void OnChannelConnected(int32 peer_pid) override;
 
   // Different types of ExtensionServers are initialized with different
   // permission delegates: For out-of-process extensions the extension
@@ -101,7 +101,8 @@ class XWalkExtensionServer : public IPC::Listener,
 
   void DeleteInstanceMap();
 
-  bool ValidateExtensionEntryPoints(const base::ListValue& entry_points);
+  bool ValidateExtensionEntryPoints(
+      const std::vector<std::string>& entry_points);
 
   base::Lock sender_lock_;
   IPC::Sender* sender_;

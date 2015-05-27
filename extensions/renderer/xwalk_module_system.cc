@@ -235,7 +235,8 @@ bool XWalkModuleSystem::SetTrampolineAccessorForEntryPoint(
 
   v8::Isolate* isolate = context->GetIsolate();
   v8::Local<v8::Array> params = v8::Array::New(isolate);
-  v8::Local<v8::String> entry = v8::String::NewFromUtf8(isolate, entry_point.c_str());
+  v8::Local<v8::String> entry = v8::String::NewFromUtf8(isolate,
+                                                        entry_point.c_str());
   params->Set(v8::Integer::New(isolate, 0), user_data);
   params->Set(v8::Integer::New(isolate, 1), entry);
 
@@ -263,14 +264,15 @@ bool XWalkModuleSystem::DeleteAccessorForEntryPoint(
     return false;
   }
 
-  value.As<v8::Object>()->ForceDelete(
+  value.As<v8::Object>()->Delete(
       v8::String::NewFromUtf8(context->GetIsolate(), basename.c_str()));
   return true;
 }
 
 bool XWalkModuleSystem::InstallTrampoline(v8::Handle<v8::Context> context,
                                           ExtensionModuleEntry* entry) {
-  v8::Local<v8::External> entry_ptr = v8::External::New(context->GetIsolate(), entry);
+  v8::Local<v8::External> entry_ptr = v8::External::New(context->GetIsolate(),
+                                                        entry);
   bool ret;
 
   ret = SetTrampolineAccessorForEntryPoint(context, entry->name, entry_ptr);
@@ -355,15 +357,19 @@ void XWalkModuleSystem::DeleteExtensionModules() {
 void XWalkModuleSystem::LoadExtensionForTrampoline(
     v8::Isolate* isolate,
     v8::Local<v8::Value> data) {
+  v8::HandleScope handle_scope(isolate);
   v8::Local<v8::Array> params = data.As<v8::Array>();
-  void* ptr = params->Get(v8::Integer::New(isolate, 0)).As<v8::External>()->Value();
+  void* ptr = params->Get(
+      v8::Integer::New(isolate, 0)).As<v8::External>()->Value();
 
   ExtensionModuleEntry* entry = static_cast<ExtensionModuleEntry*>(ptr);
 
   if (!entry)
     return;
+  v8::Handle<v8::Context> context = params->CreationContext();
 
-  v8::Handle<v8::Context> context = isolate->GetCurrentContext();
+  // Switch to the target context in case cross-context reference.
+  v8::Context::Scope context_scope(context);
 
   DeleteAccessorForEntryPoint(context, entry->name);
 
@@ -379,7 +385,7 @@ void XWalkModuleSystem::LoadExtensionForTrampoline(
             module_system->require_native_template_);
 
   XWalkExtensionModule* module = entry->module;
-  module->LoadExtensionCode(module_system->GetV8Context(),
+  module->LoadExtensionCode(context,
                             require_native_template->GetFunction());
 
   module_system->EnsureExtensionNamespaceIsReadOnly(context, entry->name);
@@ -398,7 +404,7 @@ v8::Handle<v8::Value> XWalkModuleSystem::RefetchHolder(
   path.pop_back();
 
   std::string error;
-  return GetObjectForPath(isolate->GetCurrentContext(), path, &error);
+  return GetObjectForPath(params->CreationContext(), path, &error);
 }
 
 // static

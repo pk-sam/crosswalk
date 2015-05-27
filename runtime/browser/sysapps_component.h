@@ -14,18 +14,18 @@ namespace xwalk {
 class SysAppsComponent : public XWalkComponent {
  public:
   SysAppsComponent();
-  virtual ~SysAppsComponent();
+  ~SysAppsComponent() override;
 
   void DisableDeviceCapabilities() { manager_.DisableDeviceCapabilities(); }
 
  private:
   // XWalkComponent implementation.
-  virtual void CreateUIThreadExtensions(
+  void CreateUIThreadExtensions(
       content::RenderProcessHost* host,
-      extensions::XWalkExtensionVector* extensions) OVERRIDE;
-  virtual void CreateExtensionThreadExtensions(
+      extensions::XWalkExtensionVector* extensions) override;
+  void CreateExtensionThreadExtensions(
       content::RenderProcessHost* host,
-      extensions::XWalkExtensionVector* extensions) OVERRIDE;
+      extensions::XWalkExtensionVector* extensions) override;
 
   sysapps::SysAppsManager manager_;
 };

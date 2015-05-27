@@ -13,14 +13,14 @@ namespace sysapps {
 class StorageInfoProviderAndroid : public StorageInfoProvider {
  public:
   StorageInfoProviderAndroid();
-  virtual ~StorageInfoProviderAndroid();
+  ~StorageInfoProviderAndroid() override;
 
-  virtual scoped_ptr<SystemStorage> storage_info() const OVERRIDE;
+  scoped_ptr<SystemStorage> storage_info() const override;
 
  private:
   // StorageInfoProvider implementation.
-  virtual void StartStorageMonitoring() OVERRIDE;
-  virtual void StopStorageMonitoring() OVERRIDE;
+  void StartStorageMonitoring() override;
+  void StopStorageMonitoring() override;
 };
 
 }  // namespace sysapps

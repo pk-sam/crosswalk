@@ -20,7 +20,7 @@ namespace xwalk {
 class TopViewLayout : public views::LayoutManager {
  public:
   TopViewLayout();
-  virtual ~TopViewLayout();
+  ~TopViewLayout() override;
 
   // Must be set to the content view, that will fill all the remaining available
   // space in the layout. The |content_view| must be child of the view that this
@@ -42,8 +42,8 @@ class TopViewLayout : public views::LayoutManager {
   bool IsUsingOverlay() const;
 
   // views::LayoutManager implementation.
-  virtual void Layout(views::View* host) OVERRIDE;
-  virtual gfx::Size GetPreferredSize(const views::View* host) const OVERRIDE;
+  void Layout(views::View* host) override;
+  gfx::Size GetPreferredSize(const views::View* host) const override;
 
  private:
   views::View* top_view_;

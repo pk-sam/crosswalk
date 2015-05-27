@@ -21,20 +21,20 @@ class StorageInfoProviderChromium
       public storage_monitor::RemovableStorageObserver {
  public:
   StorageInfoProviderChromium();
-  virtual ~StorageInfoProviderChromium();
+  ~StorageInfoProviderChromium() override;
 
-  virtual scoped_ptr<SystemStorage> storage_info() const OVERRIDE;
+  scoped_ptr<SystemStorage> storage_info() const override;
 
   // RemovableStorageObserver implementation.
-  virtual void OnRemovableStorageAttached(
-      const storage_monitor::StorageInfo& info) OVERRIDE;
-  virtual void OnRemovableStorageDetached(
-      const storage_monitor::StorageInfo& info) OVERRIDE;
+  void OnRemovableStorageAttached(
+      const storage_monitor::StorageInfo& info) override;
+  void OnRemovableStorageDetached(
+      const storage_monitor::StorageInfo& info) override;
 
  private:
   // StorageInfoProvider implementation.
-  virtual void StartStorageMonitoring() OVERRIDE;
-  virtual void StopStorageMonitoring() OVERRIDE;
+  void StartStorageMonitoring() override;
+  void StopStorageMonitoring() override;
 };
 
 }  // namespace sysapps

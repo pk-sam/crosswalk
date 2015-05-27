@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/basictypes.h"
+#include "base/memory/scoped_ptr.h"
 
 namespace content {
 class DevToolsHttpHandler;
@@ -15,23 +16,21 @@ class DevToolsHttpHandler;
 
 namespace xwalk {
 
-class RuntimeContext;
+class XWalkBrowserContext;
 
 class RemoteDebuggingServer {
  public:
-  RemoteDebuggingServer(RuntimeContext* runtime_context,
+  RemoteDebuggingServer(XWalkBrowserContext* browser_context,
                         const std::string& ip,
                         int port,
                         const std::string& frontend_url);
 
   virtual ~RemoteDebuggingServer();
-
-  content::DevToolsHttpHandler* devtools_http_handler() const {
-    return devtools_http_handler_;
-  }
+  int port() { return port_; }
 
  private:
-  content::DevToolsHttpHandler* devtools_http_handler_;
+  scoped_ptr<content::DevToolsHttpHandler> devtools_http_handler_;
+  int port_;
   DISALLOW_COPY_AND_ASSIGN(RemoteDebuggingServer);
 };
 

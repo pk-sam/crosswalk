@@ -19,14 +19,14 @@ class BindingObjectStore;
 class TCPServerSocketObject : public RawSocketObject {
  public:
   explicit TCPServerSocketObject(RawSocketInstance* instance);
-  virtual ~TCPServerSocketObject();
+  ~TCPServerSocketObject() override;
 
  private:
   void DoAccept();
 
   // EventTarget implementation.
-  virtual void StartEvent(const std::string& type) OVERRIDE;
-  virtual void StopEvent(const std::string& type) OVERRIDE;
+  void StartEvent(const std::string& type) override;
+  void StopEvent(const std::string& type) override;
 
   // JavaScript function handlers.
   void OnInit(scoped_ptr<XWalkExtensionFunctionInfo> info);

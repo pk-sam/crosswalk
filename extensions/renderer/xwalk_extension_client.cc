@@ -5,6 +5,7 @@
 #include "xwalk/extensions/renderer/xwalk_extension_client.h"
 
 #include "base/values.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/stl_util.h"
 #include "ipc/ipc_sender.h"
 #include "xwalk/extensions/common/xwalk_extension_messages.h"
@@ -74,7 +75,8 @@ void XWalkExtensionClient::OnPostMessageToJS(int64_t instance_id,
     return;
 
   const base::Value* value;
-  msg.Get(0, &value);
+  if (!msg.Get(0, &value))
+    return;
   it->second->HandleMessageFromNative(*value);
 }
 
@@ -83,9 +85,11 @@ void XWalkExtensionClient::OnPostOutOfLineMessageToJS(
   CHECK(base::SharedMemory::IsHandleValid(handle));
 
   base::SharedMemory shared_memory(handle, true);
-  shared_memory.Map(size);
+  if (!shared_memory.Map(size))
+    return;
 
-  IPC::Message message(static_cast<char*>(shared_memory.memory()), size);
+  IPC::Message message(static_cast<char*>(shared_memory.memory()),
+                       base::checked_cast<int>(size));
   OnMessageReceived(message);
 }
 

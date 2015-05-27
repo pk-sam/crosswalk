@@ -8,6 +8,7 @@
         '../../../application/common/xwalk_application_common.gypi:xwalk_application_common_lib',
         '../../../build/system.gyp:gio',
         '../../../build/system.gyp:tizen',
+        '../../../build/system.gyp:tizen_tzplatform_config',
       ],
       'include_dirs': [
         '../../../..',
@@ -27,6 +28,8 @@
         # TODO(t.iwanek) fix me - this duplicates compilation of those files
         '../../../runtime/common/xwalk_paths.cc',
         '../../../runtime/common/xwalk_paths.h',
+        '../../../runtime/common/xwalk_switches.cc',
+        '../../../runtime/common/xwalk_switches.h',
         '../../../runtime/common/xwalk_system_locale.cc',
         '../../../runtime/common/xwalk_system_locale.h',
       ],
@@ -50,6 +53,8 @@
         # TODO(t.iwanek) fix me - this duplicates compilation of those files
         '../../../runtime/common/xwalk_paths.cc',
         '../../../runtime/common/xwalk_paths.h',
+        '../../../runtime/common/xwalk_switches.cc',
+        '../../../runtime/common/xwalk_switches.h',
         '../../../runtime/common/xwalk_system_locale.cc',
         '../../../runtime/common/xwalk_system_locale.h',
       ],

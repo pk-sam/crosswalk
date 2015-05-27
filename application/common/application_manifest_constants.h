@@ -18,7 +18,15 @@ namespace application_manifest_keys {
   extern const char kDisplay[];
   // extern const char kOrientation[];
   extern const char kStartURLKey[];
+  extern const char kScopeKey[];
   extern const char kCSPKey[];
+  extern const char kBoundsKey[];
+  extern const char kWidthKey[];
+  extern const char kHeightKey[];
+  extern const char kMinWidthKey[];
+  extern const char kMinHeightKey[];
+  extern const char kMaxWidthKey[];
+  extern const char kMaxHeightKey[];
 
   // Deprecated fields:
 
@@ -86,6 +94,8 @@ namespace application_widget_keys {
   extern const char kPreferencesNameKey[];
   extern const char kPreferencesValueKey[];
   extern const char kPreferencesReadonlyKey[];
+  extern const char kWidgetNamespaceKey[];
+  extern const char kWidgetNamespacePrefix[];
 #if defined(OS_TIZEN)
   extern const char kTizenWidgetKey[];
   extern const char kTizenApplicationKey[];
@@ -131,13 +141,30 @@ namespace application_widget_keys {
   extern const char kTizenAppWidgetBoxContentDropViewSrcKey[];
   extern const char kTizenAppWidgetBoxContentDropViewWidthKey[];
   extern const char kTizenAppWidgetBoxContentDropViewHeightKey[];
+  extern const char kTizenApplicationAppControlsKey[];
+  extern const char kTizenApplicationAppControlSrcKey[];
+  extern const char kTizenApplicationAppControlOperationKey[];
+  extern const char kTizenApplicationAppControlUriKey[];
+  extern const char kTizenApplicationAppControlMimeKey[];
+  extern const char kTizenApplicationAppControlChildNameAttrKey[];
+  extern const char kTizenImeKey[];
+  extern const char kTizenImeUuidKey[];
+  extern const char kTizenImeUuidTextKey[];
+  extern const char kTizenImeLanguagesKey[];
+  extern const char kTizenImeLanguageKey[];
+  extern const char kTizenImeLanguageTextKey[];
+  extern const char kTizenCategoryKey[];
+  extern const char kTizenCategoryNameKey[];
+  extern const char kTizenNamespacePrefix[];
 #endif
 }  // namespace application_widget_keys
 
-extern const char kW3CNamespacePrefix[];
-#if defined(OS_TIZEN)
-extern const char kTizenNamespacePrefix[];
-#endif
+namespace application_manifest_values {
+extern const char kDisplayModeFullscreen[];
+extern const char kDisplayModeStandalone[];
+extern const char kDisplayModeMinimalUI[];
+extern const char kDisplayModeBrowser[];
+}  // namespace application_manifest_values
 
 namespace application_manifest_errors {
   extern const char kInvalidDescription[];

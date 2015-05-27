@@ -20,22 +20,45 @@ sys.path.append(xwalk_dir)
 
 from app_info import AppInfo
 from customize import VerifyPackageName, CustomizeAll, \
-                      ParseParameterForCompressor
+                      ParseParameterForCompressor, CustomizeManifest
 from extension_manager import GetExtensionList, GetExtensionStatus
 from handle_permissions import permission_mapping_table
-from util import AllArchitectures, CleanDir, GetVersion, RunCommand, \
+from util import CleanDir, GetVersion, RunCommand, \
                  CreateAndCopyDir, GetBuildDir
 from manifest_json_parser import HandlePermissionList
 from manifest_json_parser import ManifestJsonParser
 
 
 NATIVE_LIBRARY = 'libxwalkcore.so'
+DUMMY_LIBRARY = 'libxwalkdummy.so'
+EMBEDDED_LIBRARY = 'xwalk_core_library'
+SHARED_LIBRARY = 'xwalk_shared_library'
+
+
+# FIXME(rakuco): Only ALL_ARCHITECTURES should exist. We keep these two
+# separate lists because SUPPORTED_ARCHITECTURES contains the architectures
+# for which we provide official Crosswalk downloads. We do not want to
+# prevent users from providing APKs for other architectures if they build
+# Crosswalk themselves though.
+SUPPORTED_ARCHITECTURES = (
+  'arm',
+  'x86',
+)
+
+ALL_ARCHITECTURES = (
+  'arm',
+  'arm64',
+  'x86',
+  'x86_64',
+)
 
 
 def ConvertArchNameToArchFolder(arch):
   arch_dict = {
       'x86': 'x86',
-      'arm': 'armeabi-v7a'
+      'x86_64': 'x86_64',
+      'arm': 'armeabi-v7a',
+      'arm64': 'arm64-v8a'
   }
   return arch_dict.get(arch, None)
 
@@ -77,14 +100,16 @@ def ContainsNativeLibrary(path):
   return os.path.isfile(os.path.join(path, NATIVE_LIBRARY))
 
 
+def ContainsCompressedLibrary(path):
+  return os.path.isfile(os.path.join(path, NATIVE_LIBRARY + ".lzma"))
+
+
 def ParseManifest(options):
   parser = ManifestJsonParser(os.path.expanduser(options.manifest))
   if not options.name:
     options.name = parser.GetAppName()
   if not options.app_version:
     options.app_version = parser.GetVersion()
-  if not options.app_versionCode and not options.app_versionCodeBase:
-    options.app_versionCode = 1
   if parser.GetDescription():
     options.description = parser.GetDescription()
   if parser.GetPermissions():
@@ -96,6 +121,8 @@ def ParseManifest(options):
   else:
     print('Error: there is no app launch path defined in manifest.json.')
     sys.exit(9)
+  if not options.xwalk_apk_url and parser.GetXWalkApkUrl():
+    options.xwalk_apk_url = parser.GetXWalkApkUrl()
   options.icon_dict = {}
   if parser.GetAppRoot():
     options.app_root = parser.GetAppRoot()
@@ -142,30 +169,66 @@ def FindExtensionJars(root_path):
   return extension_jars
 
 
-# Follows the recommendation from
-# http://software.intel.com/en-us/blogs/2012/11/12/how-to-publish-
-# your-apps-on-google-play-for-x86-based-android-devices-using
-def MakeVersionCode(options):
-  ''' Construct a version code'''
+def MakeCodeBaseFromAppVersion(app_version):
+  """
+  Generates a string suitable for an Android versionCode from a version number.
+
+  The returned string will be appended to the ABI prefix digit to create a
+  version number for the android:versionCode attribute of the Android manifest
+  file.
+
+  |app_version| must be a string with the format "ab.cd.efg", all digits but
+   'a' being optional.
+  If |app_version|'s format is invalid, this function returns None.
+  """
+  version_re = r'\d{1,2}(\.\d{1,2}(\.\d{1,3})?)?$'
+  if not re.match(version_re, app_version):
+    return None
+  version_numbers = [int(i) for i in app_version.split('.')]
+  version_numbers.extend([0] * (3 - len(version_numbers))) # Pad to 3 parts.
+  return '%02d%02d%03d' % tuple(version_numbers)
+
+
+def MakeVersionCode(options, app_version):
+  """
+  Returns a number in a format suitable for Android's android:versionCode
+  manifest attribute.
+
+  If the --app-versionCode option is not provided, this function tries to
+  generate an 8-digit version code based on, in this order, either the
+  --app-versionCodeBase parameter or --app-version (or its JSON manifest
+  counterpart, "xwalk_version"), as recommended by
+  """
   if options.app_versionCode:
     return options.app_versionCode
 
-  # First digit is ABI, ARM=2, x86=6
-  abi = '0'
-  if options.arch == 'arm':
-    abi = '2'
-  if options.arch == 'x86':
-    abi = '6'
-  b = '0'
-  if options.app_versionCodeBase:
-    b = str(options.app_versionCodeBase)
-    if len(b) > 7:
-      print('Version code base must be 7 digits or less: '
-            'versionCodeBase=%s' % (b))
+  # The android:versionCode we build follows the recommendations from
+  # https://software.intel.com/en-us/blogs/2012/11/12/how-to-publish-your-apps-on-google-play-for-x86-based-android-devices-using
+  arch_abis = {
+    'arm': 2,
+    'arm64': 3,
+    'x86': 6,
+    'x86_64': 7,
+  }
+  abi_number = arch_abis.get(options.arch, 0)
+  if options.app_versionCodeBase is not None:
+    if len(str(options.app_versionCodeBase)) > 7:
+      print('Error: --app-versionCodeBase must have 7 digits or less.')
       sys.exit(12)
-  # zero pad to 7 digits, middle digits can be used for other
-  # features, according to recommendation in URL
-  return '%s%s' % (abi, b.zfill(7))
+    version_code_base = options.app_versionCodeBase
+  else:
+    version_code_base = MakeCodeBaseFromAppVersion(app_version)
+    if version_code_base is None:
+      print('Error: Cannot create a valid android:versionCode from version '
+            'number "%s". Valid version numbers must follow the format '
+            '"ab.cd.efg", where only \'a\' is mandatory. For example, "1", '
+            '"3.45" and "12.3.976" are all valid version numbers. If you use '
+            'a different versioning scheme, please either "--app-versionCode" '
+            'or "--app-versionCodeBase" to manually provide the '
+            'android:versionCode number that your APK will use.' % app_version)
+      sys.exit(12)
+    version_code_base = int(version_code_base)
+  return '%d%07d' % (abi_number, version_code_base)
 
 
 def GetExtensionBinaryPathList():
@@ -203,7 +266,6 @@ def Customize(options, app_info, manifest):
   app_info.android_name = ''.join([i.capitalize() for i in android_name if i])
   if options.app_version:
     app_info.app_version = options.app_version
-  app_info.app_versionCode = MakeVersionCode(options)
   if options.app_root:
     app_info.app_root = os.path.expanduser(options.app_root)
   if options.enable_remote_debugging:
@@ -216,6 +278,8 @@ def Customize(options, app_info, manifest):
     app_info.orientation = options.orientation
   if options.icon:
     app_info.icon = '%s' % os.path.expanduser(options.icon)
+  if options.xwalk_apk_url:
+    app_info.xwalk_apk_url = options.xwalk_apk_url
 
   #Add local extensions to extension list.
   extension_binary_path_list = GetExtensionBinaryPathList()
@@ -237,7 +301,50 @@ def Customize(options, app_info, manifest):
                options.xwalk_command_line, options.compressor)
 
 
-def Execution(options, name):
+def CleanCompressedLibrary(library_path, arch):
+  useless = os.path.join(library_path, NATIVE_LIBRARY + '.' + arch)
+  if os.path.isfile(useless):
+    os.remove(useless)
+
+
+def CleanNativeLibrary(library_path, arch):
+  lib_dir = os.path.join(library_path, arch)
+  if os.path.isdir(lib_dir):
+    shutil.rmtree(lib_dir)
+
+
+def CopyCompressedLibrary(native_path, library_path, raw_path, arch):
+  # copy dummy library file to keep the arch info if it's available.
+  arch_path = os.path.join(library_path, arch)
+  dummy_library = os.path.join(native_path, DUMMY_LIBRARY);
+  if os.path.isfile(dummy_library):
+    if not os.path.isdir(arch_path):
+      os.mkdir(arch_path)
+    shutil.copy(dummy_library, arch_path)
+
+  compressed_library = os.path.join(native_path, NATIVE_LIBRARY + '.lzma')
+  shutil.copy(compressed_library, raw_path)
+
+
+def CopyNativeLibrary(native_path, library_path, raw_path, arch):
+  # do not need dummy library when lzma disabled.
+  dummy_library = os.path.join(native_path, DUMMY_LIBRARY);
+  if os.path.isfile(dummy_library):
+    os.remove(dummy_library)
+
+  shutil.copytree(native_path, os.path.join(library_path, arch))
+
+
+def Execution(options, app_info):
+  # Now we've got correct app_version and correct ABI value,
+  # start to generate suitable versionCode
+  app_info.app_versionCode = MakeVersionCode(options, app_info.app_version)
+  # Write generated versionCode into AndroidManifest.xml.
+  # Later if we have other customization,
+  # we can put them together into CustomizeManifest func.
+  CustomizeManifest(app_info)
+  name = app_info.android_name
+
   arch_string = (' ('+options.arch+')' if options.arch else '')
   print('\nStarting application build' + arch_string)
   app_dir = GetBuildDir(name)
@@ -278,12 +385,35 @@ def Execution(options, name):
   if options.mode == 'embedded':
     print(' * Updating project with xwalk_core_library')
     RunCommand([android_path, 'update', 'lib-project',
-                '--path', os.path.join(app_dir, 'xwalk_core_library'),
+                '--path', os.path.join(app_dir, EMBEDDED_LIBRARY),
                 '--target', target_string])
-    update_project_cmd.extend(['-l', 'xwalk_core_library'])
+    update_project_cmd.extend(['-l', EMBEDDED_LIBRARY])
+  elif options.mode == 'shared':
+    print(' * Updating project with xwalk_shared_library')
+    RunCommand([android_path, 'update', 'lib-project',
+                '--path', os.path.join(app_dir, SHARED_LIBRARY),
+                '--target', target_string])
+    update_project_cmd.extend(['-l', SHARED_LIBRARY])
   else:
     print(' * Updating project')
   RunCommand(update_project_cmd)
+
+  # Enable proguard
+  if options.mode == 'embedded' and options.enable_proguard:
+    print(' * Enabling proguard config files')
+    # Enable proguard in project.properies.
+    if not os.path.exists(os.path.join(app_dir, 'project.properties')):
+      print('Error, project.properties file not found!')
+      sys.exit(14)
+    file_prop = file(os.path.join(app_dir, 'project.properties'), 'a')
+    file_prop.write('proguard.config=${sdk.dir}/tools/proguard/'
+                    'proguard-android.txt:proguard-xwalk.txt')
+    file_prop.close()
+
+    # Add proguard cfg file.
+    if not os.path.exists(os.path.join(app_dir, 'proguard-xwalk.txt')):
+      print('Error, proguard config file for Crosswalk not found!')
+      sys.exit(14)
 
   # Check whether external extensions are included.
   print(' * Checking for external extensions')
@@ -305,14 +435,26 @@ def Execution(options, name):
     if not arch:
       print ('Invalid CPU arch: %s.' % arch)
       sys.exit(10)
-    library_lib_path = os.path.join(app_dir, 'xwalk_core_library', 'libs')
-    for dir_name in os.listdir(library_lib_path):
-      lib_dir = os.path.join(library_lib_path, dir_name)
-      if ContainsNativeLibrary(lib_dir):
-        shutil.rmtree(lib_dir)
-    native_lib_path = os.path.join(app_dir, 'native_libs', arch)
-    if ContainsNativeLibrary(native_lib_path):
-      shutil.copytree(native_lib_path, os.path.join(library_lib_path, arch))
+
+    native_path = os.path.join(app_dir, 'native_libs', arch)
+    library_path = os.path.join(app_dir, EMBEDDED_LIBRARY, 'libs')
+    raw_path = os.path.join(app_dir, EMBEDDED_LIBRARY, 'res', 'raw')
+
+    if options.enable_lzma:
+      contains_library = ContainsCompressedLibrary
+      clean_library = CleanCompressedLibrary
+      copy_library = CopyCompressedLibrary
+    else:
+      contains_library = ContainsNativeLibrary
+      clean_library = CleanNativeLibrary
+      copy_library = CopyNativeLibrary
+
+    # cleanup previous build's library first.
+    for dir_name in os.listdir(library_path):
+      clean_library(library_path, dir_name)
+
+    if contains_library(native_path):
+      copy_library(native_path, library_path, raw_path, arch)
     else:
       print('No %s native library has been found for creating a Crosswalk '
             'embedded APK.' % arch)
@@ -360,6 +502,17 @@ def Execution(options, name):
   shutil.copyfile(src_file, dst_file)
   print(' (Location: %s)' % dst_file)
 
+  #Copy proguard dumping files
+  if options.mode == 'embedded' and options.enable_proguard \
+      and not options.project_dir:
+    proguard_dir = os.path.join(app_dir, 'bin/proguard/')
+    if os.path.exists(proguard_dir):
+      for afile in os.listdir(proguard_dir):
+        if afile.endswith('.txt'):
+          shutil.copy(os.path.join(proguard_dir,afile), xwalk_dir)
+    else:
+      print('Warning:Cannot find proguard dumping directory!')
+
 def PrintPackageInfo(options, name, packaged_archs):
   package_name_version = os.path.join(options.target_dir, name)
   if options.app_version:
@@ -372,22 +525,19 @@ def PrintPackageInfo(options, name, packaged_archs):
            % (name, package_name_version))
     return
 
-  all_archs = set(AllArchitectures())
-
-  if len(packaged_archs) != len(all_archs):
-    missed_archs = all_archs - set(packaged_archs)
-    print ('\nNote: This APK will only work on %s-based Android devices.'
-           ' Consider building\nfor %s as well.' %
-           (', '.join(packaged_archs), ', '.join(missed_archs)))
-  else:
-    print ("\nApplication apk's were created for %d architectures (%s)." %
-           (len(all_archs), (','.join(all_archs))))
-    print ('If you submit this application to an application '
-           'store, please submit both\npackages. Instructions '
-           'for submitting multiple APKs to Google Play Store are\navailable '
-           'here:')
-    print (' https://software.intel.com/en-us/html5/articles/submitting'
-           '-multiple-crosswalk-apk-to-google-play-store')
+  print('\nApplication APKs were created for the following architectures:')
+  for arch in sorted(packaged_archs):
+    print(' * %s' % arch)
+  missing_architectures = set(SUPPORTED_ARCHITECTURES) - set(packaged_archs)
+  if missing_architectures:
+    print('Consider building for the following architectures as well:')
+    for arch in sorted(missing_architectures):
+      print(' * %s' % arch)
+  print ('If you submit this application to an application store, please '
+         'submit packages for all architectures. Instructions for submitting '
+         'multiple APKs to the Google Play Store are available here:')
+  print ('https://software.intel.com/en-us/html5/articles/submitting'
+         '-multiple-crosswalk-apk-to-google-play-store')
 
 
 def CheckSystemRequirements():
@@ -400,8 +550,8 @@ def CheckSystemRequirements():
     print('failed\nThe "android" binary could not be found. Check your Android '
           'SDK installation and your PATH environment variable.')
     sys.exit(1)
-  if GetAndroidApiLevel(android_path) < 14:
-    print('failed\nPlease install Android API level (>=14) first.')
+  if GetAndroidApiLevel(android_path) < 21:
+    print('failed\nPlease install Android API level (>=21) first.')
     sys.exit(3)
 
   # Check ant install
@@ -413,6 +563,73 @@ def CheckSystemRequirements():
   print('ok')
 
 
+def MakeCompressedLibrary(lib_dir):
+  # use lzma to compress the native library.
+  native_library = os.path.join(lib_dir, NATIVE_LIBRARY)
+  RunCommand(['lzma', '-f', native_library])
+  return True
+
+
+def MakeNativeLibrary(lib_dir):
+  # use lzma to decompress the compressed library.
+  compressed_library = os.path.join(lib_dir, NATIVE_LIBRARY + '.lzma')
+  RunCommand(['lzma', '-d', compressed_library])
+  return True
+
+
+def MakeSharedApk(options, app_info, app_dir):
+  # Copy xwalk_shared_library into app folder
+  target_library_path = os.path.join(app_dir, SHARED_LIBRARY)
+  shutil.copytree(os.path.join(xwalk_dir, SHARED_LIBRARY),
+                  target_library_path)
+  Execution(options, app_info)
+
+
+def MakeEmbeddedApk(options, app_info, app_dir, packaged_archs):
+  # Copy xwalk_core_library into app folder and move the native libraries out.
+  # When making apk for specified CPU arch, will only include the
+  # corresponding native library by copying it back into xwalk_core_library.
+  target_library_path = os.path.join(app_dir, EMBEDDED_LIBRARY)
+  shutil.copytree(os.path.join(xwalk_dir, EMBEDDED_LIBRARY),
+                  target_library_path)
+  library_path = os.path.join(target_library_path, 'libs')
+  native_path = os.path.join(app_dir, 'native_libs')
+  os.makedirs(native_path)
+  available_archs = []
+
+  if options.enable_lzma:
+    contains_library = ContainsCompressedLibrary
+    make_library = MakeCompressedLibrary
+  else:
+    contains_library = ContainsNativeLibrary
+    make_library = MakeNativeLibrary
+
+  for dir_name in os.listdir(library_path):
+    lib_dir = os.path.join(library_path, dir_name)
+    if os.path.isdir(lib_dir) and \
+    (contains_library(lib_dir) or make_library(lib_dir)):
+      shutil.move(lib_dir, os.path.join(native_path, dir_name))
+      available_archs.append(dir_name)
+
+  if options.arch:
+    Execution(options, app_info)
+    packaged_archs.append(options.arch)
+  else:
+    # If the arch option is unspecified, all of available platform APKs
+    # will be generated.
+    for arch in ALL_ARCHITECTURES:
+      if ConvertArchNameToArchFolder(arch) in available_archs:
+        options.arch = arch
+        Execution(options, app_info)
+        packaged_archs.append(options.arch)
+      else:
+        print('Warning: failed to create package for arch "%s" '
+              'due to missing native library' % arch)
+    if len(packaged_archs) == 0:
+      print('No packages created, aborting')
+      sys.exit(13)
+
+
 def MakeApk(options, app_info, manifest):
   CheckSystemRequirements()
   Customize(options, app_info, manifest)
@@ -420,51 +637,9 @@ def MakeApk(options, app_info, manifest):
   app_dir = GetBuildDir(name)
   packaged_archs = []
   if options.mode == 'shared':
-    # For shared mode, it's not necessary to use the whole xwalk core library,
-    # use xwalk_core_library_java_app_part.jar from it is enough.
-    java_app_part_jar = os.path.join(xwalk_dir, 'xwalk_core_library', 'libs',
-                                     'xwalk_core_library_java_app_part.jar')
-    shutil.copy(java_app_part_jar, os.path.join(app_dir, 'libs'))
-    Execution(options, name)
-  elif options.mode == 'embedded':
-    # Copy xwalk_core_library into app folder and move the native libraries
-    # out.
-    # When making apk for specified CPU arch, will only include the
-    # corresponding native library by copying it back into xwalk_core_library.
-    target_library_path = os.path.join(app_dir, 'xwalk_core_library')
-    shutil.copytree(os.path.join(xwalk_dir, 'xwalk_core_library'),
-                    target_library_path)
-    library_lib_path = os.path.join(target_library_path, 'libs')
-    native_lib_path = os.path.join(app_dir, 'native_libs')
-    os.makedirs(native_lib_path)
-    available_archs = []
-    for dir_name in os.listdir(library_lib_path):
-      lib_dir = os.path.join(library_lib_path, dir_name)
-      if ContainsNativeLibrary(lib_dir):
-        shutil.move(lib_dir, os.path.join(native_lib_path, dir_name))
-        available_archs.append(dir_name)
-    if options.arch:
-      Execution(options, name)
-      packaged_archs.append(options.arch)
-    else:
-      # If the arch option is unspecified, all of available platform APKs
-      # will be generated.
-      valid_archs = ['x86', 'armeabi-v7a']
-      for arch in valid_archs:
-        if arch in available_archs:
-          if arch.find('x86') != -1:
-            options.arch = 'x86'
-          elif arch.find('arm') != -1:
-            options.arch = 'arm'
-          Execution(options, name)
-          packaged_archs.append(options.arch)
-        else:
-          print('Warning: failed to create package for arch "%s" '
-                'due to missing native library' % arch)
-
-      if len(packaged_archs) == 0:
-        print('No packages created, aborting')
-        sys.exit(13)
+    MakeSharedApk(options, app_info, app_dir)
+  else: # default
+    MakeEmbeddedApk(options, app_info, app_dir, packaged_archs)
 
   # if project_dir, save build directory
   if options.project_dir:
@@ -503,10 +678,10 @@ def main(argv):
           'Set the default mode as \'embedded\'. For example: --mode=embedded')
   parser.add_option('--mode', choices=('embedded', 'shared'),
                     default='embedded', help=info)
-  info = ('The target architecture of the embedded runtime. Supported values '
-          'are \'x86\' and \'arm\'. Note, if undefined, APKs for all possible '
-          'architestures will be generated.')
-  parser.add_option('--arch', choices=AllArchitectures(), help=info)
+  info = ('The target architecture of the embedded runtime. Supported values: '
+          '%s. If not specified, APKs for all available architectures will be '
+          'generated.' % ', '.join(ALL_ARCHITECTURES))
+  parser.add_option('--arch', choices=ALL_ARCHITECTURES, help=info)
   group = optparse.OptionGroup(parser, 'Application Source Options',
       'This packaging tool supports 3 kinds of web application source: '
       '1) XPK package; 2) manifest.json; 3) various command line options, '
@@ -529,6 +704,11 @@ def main(argv):
           '\'app_root\'. This flag should work with \'--app-root\' together. '
           'For example, --app-local-path=/relative/path/of/entry/file')
   group.add_option('--app-local-path', help=info)
+  info = ('The download URL of the Crosswalk runtime library APK. '
+          'The built-in updater uses the Android download manager to fetch '
+          'the url. '
+          'For example, --xwalk-apk-url=http://myhost/XWalkRuntimeLib.apk')
+  group.add_option('--xwalk-apk-url', help=info)
   parser.add_option_group(group)
   # Mandatory options group
   group = optparse.OptionGroup(parser, 'Mandatory arguments',
@@ -544,19 +724,32 @@ def main(argv):
   group = optparse.OptionGroup(parser, 'Optional arguments',
       'They are used for various settings for applications through '
       'command line options.')
-  info = ('The version name of the application. '
-          'For example, --app-version=1.0.0')
-  group.add_option('--app-version', help=info)
-  info = ('The version code of the application. '
-          'For example, --app-versionCode=24')
-  group.add_option('--app-versionCode', type='int', help=info)
-  info = ('The version code base of the application. Version code will '
-          'be made by adding a prefix based on architecture to the version '
-          'code base. For example, --app-versionCodeBase=24')
-  group.add_option('--app-versionCodeBase', type='int', help=info)
+  group.add_option('--app-version',
+                   help='The application version, corresponding to the '
+                   'android:versionName attribute of the Android App '
+                   'Manifest. If the version is in the format "ab.cd.efg", '
+                   'like "1", "3.45" or "12.3.976", an android:versionCode '
+                   'will be generated automatically if "--app-versionCode" '
+                   'or "--app-versionCodeBase" are not specified.')
+  group.add_option('--app-versionCode', type='int',
+                   help='An integer corresponding to the android:versionCode '
+                   'attribute of the Android App Manifest. If specified, the '
+                   'value of the "--app-version" option is not used to set '
+                   'the value of the android:versionCode attribute.')
+  group.add_option('--app-versionCodeBase', type='int',
+                   help='An integer with at most 7 digits used to set the '
+                   'value of the android:versionCode attribute of the Android '
+                   'App Manifest if "--app-versionCode" is not specified. '
+                   'If both "--app-versionCodeBase" and "--app-version" are '
+                   'passed, the former will be used to set the '
+                   'android:versionCode attribute.')
   info = ('The description of the application. For example, '
           '--description=YourApplicationDescription')
   group.add_option('--description', help=info)
+  info = ('Enable proguard to shrink and obfuscate java classes of Crosswalk '
+          'and Chromium, only works with embedded mode.')
+  group.add_option('--enable-proguard', action='store_true', default=False,
+                   help=info)
   group.add_option('--enable-remote-debugging', action='store_true',
                    dest='enable_remote_debugging', default=False,
                    help='Enable remote debugging.')
@@ -622,6 +815,9 @@ def main(argv):
                    callback=ParseParameterForCompressor, type='string',
                    nargs=0, help=info)
   parser.add_option_group(group)
+  parser.add_option('--enable-lzma', action='store_true', dest='enable_lzma',
+          default=False, help='Enable LZMA.')
+
   options, _ = parser.parse_args()
   if len(argv) == 1:
     parser.print_help()
@@ -697,7 +893,11 @@ def main(argv):
   if not options.package:
     parser.error('A package name is required. Please use the "--package" '
                  'option.')
+
   VerifyPackageName(options.package)
+
+  if options.mode != 'embedded' and options.enable_lzma:
+    parser.error('LZMA is only available in embedded mode.')
 
   if (options.app_root and options.app_local_path and
       not os.path.isfile(os.path.join(options.app_root,
@@ -717,6 +917,11 @@ def main(argv):
           'with --project-dir')
     sys.exit(8)
 
+  if options.enable_proguard and options.mode != 'embedded':
+    print('\nmake_apk.py error: Option --enable-proguard only works with '
+          'embedded mode.')
+    sys.exit(14)
+
   try:
     MakeApk(options, app_info, manifest)
   except SystemExit as ec:
@@ -732,4 +937,3 @@ if __name__ == '__main__':
     sys.exit(main(sys.argv))
   except KeyboardInterrupt:
     print('')
-

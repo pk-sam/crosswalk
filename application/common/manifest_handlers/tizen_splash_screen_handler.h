@@ -19,7 +19,7 @@ namespace application {
 class TizenSplashScreenInfo : public ApplicationData::ManifestData {
  public:
   TizenSplashScreenInfo();
-  virtual ~TizenSplashScreenInfo();
+  ~TizenSplashScreenInfo() override;
 
   void set_src(const std::string &src) { src_ = src; }
   const std::string& src() const { return src_; }
@@ -31,13 +31,13 @@ class TizenSplashScreenInfo : public ApplicationData::ManifestData {
 class TizenSplashScreenHandler : public ManifestHandler {
  public:
   TizenSplashScreenHandler();
-  virtual ~TizenSplashScreenHandler();
+  ~TizenSplashScreenHandler() override;
 
-  virtual bool Parse(scoped_refptr<ApplicationData> application,
-                     base::string16* error) OVERRIDE;
-  virtual bool Validate(scoped_refptr<const ApplicationData> application,
-                        std::string* error) const OVERRIDE;
-  virtual std::vector<std::string> Keys() const OVERRIDE;
+  bool Parse(scoped_refptr<ApplicationData> application,
+             base::string16* error) override;
+  bool Validate(scoped_refptr<const ApplicationData> application,
+                std::string* error) const override;
+  std::vector<std::string> Keys() const override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(TizenSplashScreenHandler);

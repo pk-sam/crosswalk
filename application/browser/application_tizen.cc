@@ -9,26 +9,28 @@
 #include <string>
 #include <vector>
 
+#include "base/logging.h"
+
 #include "content/browser/renderer_host/media/audio_renderer_host.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/screen_orientation_dispatcher_host.h"
+#include "content/public/browser/screen_orientation_delegate.h"
 #include "content/public/browser/screen_orientation_provider.h"
 
-#include "xwalk/runtime/browser/runtime_context.h"
+#include "xwalk/runtime/browser/xwalk_browser_context.h"
 #include "xwalk/runtime/browser/runtime_url_request_context_getter.h"
 #include "xwalk/runtime/browser/ui/native_app_window.h"
 #include "xwalk/runtime/browser/ui/native_app_window_tizen.h"
 #include "xwalk/runtime/common/xwalk_common_messages.h"
 
-#if defined(USE_OZONE)
 #include "content/public/browser/render_view_host.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
+#include "ui/events/event_utils.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
 #include "ui/events/platform/platform_event_source.h"
-#endif
 
 #include "xwalk/application/common/application_manifest_constants.h"
 #include "xwalk/application/common/manifest_handlers/tizen_setting_handler.h"
@@ -87,80 +89,80 @@ blink::WebScreenOrientationLockType GetDefaultOrientation(
   }
 }
 
-class ScreenOrientationProviderTizen :
-    public content::ScreenOrientationProvider {
+class ScreenOrientationDelegateTizen :
+    public content::ScreenOrientationDelegate {
  public:
-  ScreenOrientationProviderTizen(
+  ScreenOrientationDelegateTizen(
       const base::WeakPtr<Application>& app,
       content::ScreenOrientationDispatcherHost* dispatcher)
       : app_(app),
-        dispatcher_(dispatcher),
-        request_id_(0) {
+        dispatcher_(dispatcher) {
     DCHECK(dispatcher_);
   }
 
-  virtual void LockOrientation(
-      int request_id,
-      blink::WebScreenOrientationLockType lock) OVERRIDE {
+  bool FullScreenRequired(
+      content::WebContents* web_contents) override {
     if (!app_) {
-      dispatcher_->NotifyLockError(
-          request_id,
-          blink::WebLockOrientationError::WebLockOrientationErrorNotAvailable);
+      LOG(ERROR) << "Invalid app error";
+      return false;
+    }
+    return app_->IsFullScreenRequired();
+  }
+
+  void Lock(content::WebContents* web_contents,
+            blink::WebScreenOrientationLockType lock) override {
+    if (!app_) {
+      LOG(ERROR) << "Invalid app error";
       return;
     }
-    request_id_ = request_id;
-    const std::set<Runtime*>& runtimes = app_->runtimes();
+    const std::vector<Runtime*>& runtimes = app_->runtimes();
     DCHECK(!runtimes.empty());
     // FIXME: Probably need better alignment with
     // https://w3c.github.io/screen-orientation/#screen-orientation-lock-lifetime
-    std::set<Runtime*>::iterator it = runtimes.begin();
-    for (; it != runtimes.end(); ++it) {
+    for (auto it = runtimes.begin(); it != runtimes.end(); ++it) {
       NativeAppWindow* window = (*it)->window();
       if (window && window->IsActive()) {
         ToNativeAppWindowTizen(window)->LockOrientation(lock);
         break;
       }
     }
+    int request_id = app_->GetRenderProcessHostID();
     dispatcher_->NotifyLockSuccess(request_id);
   }
 
-  virtual void UnlockOrientation() OVERRIDE {
-    LockOrientation(request_id_, GetDefaultOrientation(app_));
+  bool ScreenOrientationProviderSupported() override {
+    return true;
   }
 
-  virtual void OnOrientationChange() OVERRIDE {}
+  void Unlock(content::WebContents* web_contents) override {
+    Lock(web_contents, GetDefaultOrientation(app_));
+  }
 
  private:
   base::WeakPtr<Application> app_;
   content::ScreenOrientationDispatcherHost* dispatcher_;
-  int request_id_;
 };
 
 ApplicationTizen::ApplicationTizen(
     scoped_refptr<ApplicationData> data,
-    RuntimeContext* runtime_context)
-    : Application(data, runtime_context),
+    XWalkBrowserContext* browser_context)
+    : Application(data, browser_context),
 #if defined(OS_TIZEN_MOBILE)
       root_window_(NULL),
 #endif
       is_suspended_(false) {
-#if defined(USE_OZONE)
   ui::PlatformEventSource::GetInstance()->AddPlatformEventObserver(this);
-#endif
   cookie_manager_ = scoped_ptr<CookieManager>(
-      new CookieManager(id(), runtime_context_));
+      new CookieManager(id(), browser_context_));
 }
 
 ApplicationTizen::~ApplicationTizen() {
-#if defined(USE_OZONE)
   ui::PlatformEventSource::GetInstance()->RemovePlatformEventObserver(this);
-#endif
 }
 
 void ApplicationTizen::Hide() {
   DCHECK(!runtimes_.empty());
-  std::set<Runtime*>::iterator it = runtimes_.begin();
-  for (; it != runtimes_.end(); ++it) {
+  for (auto it = runtimes_.begin(); it != runtimes_.end(); ++it) {
     if ((*it)->window())
       (*it)->window()->Minimize();
   }
@@ -174,8 +176,8 @@ void ApplicationTizen::Show() {
   }
 }
 
-bool ApplicationTizen::Launch(const LaunchParams& launch_params) {
-  if (Application::Launch(launch_params)) {
+bool ApplicationTizen::Launch() {
+  if (Application::Launch()) {
 #if defined(OS_TIZEN_MOBILE)
     if (!runtimes_.empty()) {
       root_window_ = CreateRootWindow(*(runtimes_.begin()),
@@ -203,14 +205,54 @@ bool ApplicationTizen::Launch(const LaunchParams& launch_params) {
 
     content::ScreenOrientationDispatcherHost* host =
         web_contents_->GetScreenOrientationDispatcherHost();
-    content::ScreenOrientationProvider* provider =
-        new ScreenOrientationProviderTizen(GetWeakPtr(), host);
-    host->SetProvider(provider);
-
-    provider->LockOrientation(0, GetDefaultOrientation(GetWeakPtr()));
+    content::ScreenOrientationDelegate* delegate =
+        new ScreenOrientationDelegateTizen(GetWeakPtr(), host);
+    content::ScreenOrientationProvider::SetDelegate(delegate);
+    delegate->Lock(web_contents_, GetDefaultOrientation(GetWeakPtr()));
     return true;
   }
   return false;
+}
+
+GURL ApplicationTizen::GetStartURL(Manifest::Type type) const {
+  const std::string& bundle = data_->bundle();
+  if (bundle.empty()) {
+    return Application::GetStartURL(type);
+  }
+
+  auto app_control = AppControlInfo::CreateFromBundle(bundle);
+  if (!app_control) {
+    return Application::GetStartURL(type);
+  }
+
+  GURL app_control_url = GetAppControlStartURL(*app_control);
+  if (!app_control_url.is_valid()) {
+    return Application::GetStartURL(type);
+  }
+
+  return app_control_url;
+}
+
+GURL ApplicationTizen::GetAppControlStartURL(
+    const AppControlInfo& app_control) const {
+  const AppControlInfoList* app_controls =
+      static_cast<const AppControlInfoList*>(
+          data()->GetManifestData(
+              widget_keys::kTizenApplicationAppControlsKey));
+  if (app_controls) {
+    for (const auto& item : app_controls->controls) {
+      if (item.Covers(app_control)) {
+        LOG(INFO) << "Start URL by appcontrol: "
+                  << " operation: " << item.operation()
+                  << " mime: " << item.mime()
+                  << " uri: " << item.uri()
+                  << " src: " << item.src();
+        return data()->GetResourceURL(item.src());
+      }
+    }
+  }
+
+  return GURL();
 }
 
 base::FilePath ApplicationTizen::GetSplashScreenPath() {
@@ -237,8 +279,7 @@ void ApplicationTizen::Suspend() {
   render_process_host_->Send(new ViewMsg_SuspendJSEngine(true));
 
   DCHECK(!runtimes_.empty());
-  std::set<Runtime*>::iterator it = runtimes_.begin();
-  for (; it != runtimes_.end(); ++it) {
+  for (auto it = runtimes_.begin(); it != runtimes_.end(); ++it) {
     if ((*it)->web_contents())
       (*it)->web_contents()->WasHidden();
   }
@@ -253,24 +294,23 @@ void ApplicationTizen::Resume() {
   render_process_host_->Send(new ViewMsg_SuspendJSEngine(false));
 
   DCHECK(!runtimes_.empty());
-  std::set<Runtime*>::iterator it = runtimes_.begin();
-  for (; it != runtimes_.end(); ++it) {
+  for (auto it = runtimes_.begin(); it != runtimes_.end(); ++it) {
     if ((*it)->web_contents())
       (*it)->web_contents()->WasShown();
   }
   is_suspended_ = false;
 }
 
-#if defined(USE_OZONE)
 void ApplicationTizen::WillProcessEvent(const ui::PlatformEvent& event) {}
 
 void ApplicationTizen::DidProcessEvent(
     const ui::PlatformEvent& event) {
-  ui::Event* ui_event = static_cast<ui::Event*>(event);
-  if (!ui_event->IsKeyEvent() || ui_event->type() != ui::ET_KEY_PRESSED)
+  scoped_ptr<ui::Event> ui_event(ui::EventFromNative(event));
+  if (!ui_event ||
+      !ui_event->IsKeyEvent() || ui_event->type() != ui::ET_KEY_PRESSED)
     return;
 
-  ui::KeyEvent* key_event = static_cast<ui::KeyEvent*>(ui_event);
+  ui::KeyEvent* key_event = static_cast<ui::KeyEvent*>(ui_event.get());
 
   // FIXME: Most Wayland devices don't have similar hardware button for 'back'
   // and 'memu' as Tizen Mobile, even that hardare buttons could be different
@@ -286,13 +326,12 @@ void ApplicationTizen::DidProcessEvent(
   if (info && !info->hwkey_enabled())
     return;
 
-  for (std::set<xwalk::Runtime*>::iterator it = runtimes_.begin();
+  for (auto it = runtimes_.begin();
       it != runtimes_.end(); ++it) {
     (*it)->web_contents()->GetRenderViewHost()->Send(new ViewMsg_HWKeyPressed(
         (*it)->web_contents()->GetRoutingID(), key_event->key_code()));
   }
 }
-#endif
 
 void ApplicationTizen::RemoveAllCookies() {
   cookie_manager_->RemoveAllCookies();
@@ -303,18 +342,18 @@ void ApplicationTizen::SetUserAgentString(
   cookie_manager_->SetUserAgentString(render_process_host_, user_agent_string);
 }
 
-void ApplicationTizen::OnRuntimeAdded(Runtime* runtime) {
+void ApplicationTizen::OnNewRuntimeAdded(Runtime* runtime) {
   DCHECK(runtime);
-  Application::OnRuntimeAdded(runtime);
+  Application::OnNewRuntimeAdded(runtime);
 #if defined(OS_TIZEN_MOBILE)
   if (root_window_ && runtimes_.size() > 1)
       root_window_->Show();
 #endif
 }
 
-void ApplicationTizen::OnRuntimeRemoved(Runtime* runtime) {
+void ApplicationTizen::OnRuntimeClosed(Runtime* runtime) {
   DCHECK(runtime);
-  Application::OnRuntimeRemoved(runtime);
+  Application::OnRuntimeClosed(runtime);
 #if defined(OS_TIZEN_MOBILE)
   if (runtimes_.empty() && root_window_) {
     root_window_->Close();

@@ -16,7 +16,7 @@
 #ifndef XWALK_TIZEN_MOBILE_SENSOR_TIZEN_PLATFORM_SENSOR_H_
 #define XWALK_TIZEN_MOBILE_SENSOR_TIZEN_PLATFORM_SENSOR_H_
 
-#include <sensor.h>
+#include <sensor_internal.h>
 #include <vconf.h>
 
 #include "base/native_library.h"
@@ -28,10 +28,10 @@ namespace xwalk {
 class TizenPlatformSensor : public SensorProvider {
  public:
   TizenPlatformSensor();
-  virtual ~TizenPlatformSensor();
+  ~TizenPlatformSensor() override;
 
-  virtual bool Initialize() OVERRIDE;
-  virtual void Finish() OVERRIDE;
+  bool Initialize() override;
+  void Finish() override;
 
  private:
   bool auto_rotation_enabled_;

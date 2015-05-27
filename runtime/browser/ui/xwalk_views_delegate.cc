@@ -3,7 +3,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#if defined(USE_AURA)
+#if defined(TOOLKIT_VIEWS)
 
 #include "grit/xwalk_resources.h"
 
@@ -62,6 +62,9 @@ void XWalkViewsDelegate::OnBeforeWidgetInit(
 HICON XWalkViewsDelegate::GetDefaultWindowIcon() const {
   return LoadIcon(NULL, MAKEINTRESOURCE(IDR_XWALK_ICON_48));
 }
+HICON XWalkViewsDelegate::GetSmallWindowIcon() const {
+  return LoadIcon(NULL, MAKEINTRESOURCE(IDR_XWALK_ICON_48));
+}
 #elif defined(OS_LINUX) && !defined(OS_CHROMEOS)
 gfx::ImageSkia* XWalkViewsDelegate::GetDefaultWindowIcon() const {
   return NULL;
@@ -69,5 +72,5 @@ gfx::ImageSkia* XWalkViewsDelegate::GetDefaultWindowIcon() const {
 #endif
 }  // namespace xwalk
 
-#endif  // defined(USE_AURA)
+#endif  // defined(TOOLKIT_VIEWS)
 

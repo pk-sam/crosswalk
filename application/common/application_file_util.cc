@@ -10,8 +10,8 @@
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/file_util.h"
 #include "base/i18n/rtl.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/logging.h"
@@ -19,6 +19,7 @@
 #include "base/path_service.h"
 #include "base/strings/string16.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
 #include "net/base/escape.h"
@@ -51,9 +52,16 @@ const xmlChar kNameNodeKey[] = "name";
 const xmlChar kDescriptionNodeKey[] = "description";
 const xmlChar kAuthorNodeKey[] = "author";
 const xmlChar kLicenseNodeKey[] = "license";
+const xmlChar kIconNodeKey[] = "icon";
+
 const xmlChar kVersionAttributeKey[] = "version";
 const xmlChar kShortAttributeKey[] = "short";
 const xmlChar kDirAttributeKey[] = "dir";
+const xmlChar kEmailAttributeKey[] = "email";
+const xmlChar kHrefAttributeKey[] = "href";
+const xmlChar kIdAttributeKey[] = "id";
+const xmlChar kDefaultLocaleAttributeKey[] = "defaultlocale";
+const xmlChar kPathAttributeKey[] = "path";
 
 const char kDirLTRKey[] = "ltr";
 const char kDirRTLKey[] = "rtl";
@@ -62,6 +70,7 @@ const char kDirRLOKey[] = "rlo";
 
 const char* kSingletonElements[] = {
   "allow-navigation",
+  "author",
   "content-security-policy-report-only",
   "content-security-policy",
   "content"
@@ -177,6 +186,47 @@ bool IsSingletonElement(const std::string& name) {
   return false;
 }
 
+// According to spec 'name' and 'author' should be result of applying the rule
+// for getting text content with normalized white space to this element.
+// http://www.w3.org/TR/widgets/#rule-for-getting-text-content-with-normalized-white-space-0
+inline bool IsTrimRequiredForElement(xmlNode* root) {
+  if (xmlStrEqual(root->name, kNameNodeKey) ||
+      xmlStrEqual(root->name, kAuthorNodeKey)) {
+    return true;
+  }
+  return false;
+}
+
+// According to spec some attributes requaire applying the rule for getting
+// a single attribute value.
+// http://www.w3.org/TR/widgets/#rule-for-getting-a-single-attribute-value-0
+inline bool IsTrimRequiredForProp(xmlNode* root, xmlAttr* prop) {
+  if (xmlStrEqual(root->name, kWidgetNodeKey) &&
+      (xmlStrEqual(prop->name, kIdAttributeKey) ||
+      xmlStrEqual(prop->name, kVersionAttributeKey) ||
+      xmlStrEqual(prop->name, kDefaultLocaleAttributeKey))) {
+    return true;
+  }
+  if (xmlStrEqual(root->name, kNameNodeKey) &&
+      xmlStrEqual(prop->name, kShortAttributeKey)) {
+    return true;
+  }
+  if (xmlStrEqual(root->name, kAuthorNodeKey) &&
+      (xmlStrEqual(prop->name, kEmailAttributeKey) ||
+      xmlStrEqual(prop->name, kHrefAttributeKey))) {
+    return true;
+  }
+  if (xmlStrEqual(root->name, kLicenseNodeKey) &&
+      xmlStrEqual(prop->name, kHrefAttributeKey)) {
+    return true;
+  }
+  if (xmlStrEqual(root->name, kIconNodeKey) &&
+      xmlStrEqual(prop->name, kPathAttributeKey)) {
+    return true;
+  }
+  return false;
+}
+
 }  // namespace
 
 namespace xwalk {
@@ -247,6 +297,9 @@ base::DictionaryValue* LoadXMLNode(
     if (IsPropSupportDir(root, prop))
       prop_value = GetDirText(prop_value, current_dir);
 
+    if (IsTrimRequiredForProp(root, prop))
+      prop_value = base::CollapseWhitespace(prop_value, false);
+
     value->SetString(
         std::string(kAttributePrefix) + ToConstCharPointer(prop->name),
         prop_value);
@@ -275,7 +328,7 @@ base::DictionaryValue* LoadXMLNode(
       current_value->GetString(kNamespaceKey, &current_namespace);
       sub_value->GetString(kNamespaceKey, &new_namespace);
       if (current_namespace != new_namespace &&
-          new_namespace == kTizenNamespacePrefix)
+          new_namespace == widget_keys::kTizenNamespacePrefix)
         value->Set(sub_node_name, sub_value);
       continue;
 #endif
@@ -313,6 +366,9 @@ base::DictionaryValue* LoadXMLNode(
     }
   }
 
+  if (IsTrimRequiredForElement(root))
+    text = base::CollapseWhitespace(text, false);
+
   if (!text.empty())
     value->SetString(kTextKey, text);
 
@@ -328,8 +384,8 @@ scoped_ptr<Manifest> LoadManifest(
 template <>
 scoped_ptr<Manifest> LoadManifest<Manifest::TYPE_MANIFEST>(
     const base::FilePath& manifest_path, std::string* error) {
-  JSONFileValueSerializer serializer(manifest_path);
-  scoped_ptr<base::Value> root(serializer.Deserialize(NULL, error));
+  JSONFileValueDeserializer deserializer(manifest_path);
+  scoped_ptr<base::Value> root(deserializer.Deserialize(NULL, error));
   if (!root) {
     if (error->empty()) {
       // If |error| is empty, than the file could not be read.

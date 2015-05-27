@@ -7,26 +7,29 @@
 
 #include "base/callback.h"
 #include "base/memory/ref_counted.h"
+#include "content/public/common/permission_status.mojom.h"
 
 class GURL;
 
 namespace content {
-  class WebContents;
+class WebContents;
 }
 
 namespace xwalk {
 
-class RuntimeContext;
+class XWalkBrowserContext;
 
 class RuntimeGeolocationPermissionContext
     : public base::RefCountedThreadSafe<RuntimeGeolocationPermissionContext> {
  public:
   // content::GeolocationPermissionContext implementation.
   virtual void RequestGeolocationPermission(
-    content::WebContents* web_contents,
-    const GURL& requesting_frame,
-    base::Callback<void(bool)> result_callback,
-    base::Closure* cancel_callback);
+      content::WebContents* web_contents,
+      const GURL& requesting_frame,
+      base::Callback<void(bool)> result_callback);
+  virtual void CancelGeolocationPermissionRequest(
+      content::WebContents* web_contents,
+      const GURL& requesting_frame);
 
  protected:
   virtual ~RuntimeGeolocationPermissionContext();
@@ -34,10 +37,13 @@ class RuntimeGeolocationPermissionContext
 
  private:
   void RequestGeolocationPermissionOnUIThread(
-    content::WebContents* web_contents,
-    const GURL& requesting_frame,
-    base::Callback<void(bool)> result_callback,
-    base::Closure* cancel_callback);
+      content::WebContents* web_contents,
+      const GURL& requesting_frame,
+      base::Callback<void(bool)> result_callback);
+
+  void CancelGeolocationPermissionRequestOnUIThread(
+      content::WebContents* web_contents,
+      const GURL& requesting_frame);
 };
 
 }  // namespace xwalk

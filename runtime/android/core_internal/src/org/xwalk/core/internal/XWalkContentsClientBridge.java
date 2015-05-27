@@ -49,7 +49,7 @@ class XWalkContentsClientBridge extends XWalkContentsClient
     private XWalkClient mXWalkClient;
     private XWalkWebChromeClient mXWalkWebChromeClient;
     private Bitmap mFavicon;
-    private DownloadListener mDownloadListener;
+    private XWalkDownloadListenerInternal mDownloadListener;
     private InterceptNavigationDelegate mInterceptNavigationDelegate;
     private PageLoadListener mPageLoadListener;
     private XWalkNavigationHandler mNavigationHandler;
@@ -260,7 +260,30 @@ class XWalkContentsClientBridge extends XWalkContentsClient
 
     @Override
     public boolean onConsoleMessage(ConsoleMessage consoleMessage) {
-        return false;
+        if (mXWalkClient == null || mXWalkView == null) return false;
+        XWalkUIClientInternal.ConsoleMessageType consoleMessageType =
+            XWalkUIClientInternal.ConsoleMessageType.DEBUG;
+        ConsoleMessage.MessageLevel messageLevel = consoleMessage.messageLevel();
+        switch (messageLevel) {
+            case TIP:
+                consoleMessageType = XWalkUIClientInternal.ConsoleMessageType.INFO;
+                break;
+            case LOG:
+                consoleMessageType = XWalkUIClientInternal.ConsoleMessageType.LOG;
+                break;
+            case WARNING:
+                consoleMessageType = XWalkUIClientInternal.ConsoleMessageType.WARNING;
+                break;
+            case ERROR:
+                consoleMessageType = XWalkUIClientInternal.ConsoleMessageType.ERROR;
+                break;
+            default:
+                Log.w(TAG, "Unknown message level, defaulting to DEBUG");
+                break;
+        }
+        return mXWalkUIClient.onConsoleMessage(mXWalkView, consoleMessage.message(),
+                consoleMessage.lineNumber(), consoleMessage.sourceId(),
+                consoleMessageType);
     }
 
     @CalledByNative
@@ -373,12 +396,16 @@ class XWalkContentsClientBridge extends XWalkContentsClient
                                 String contentDisposition,
                                 String mimeType,
                                 long contentLength) {
+        if (mDownloadListener != null) {
+            mDownloadListener.onDownloadStart(
+                    url, userAgent, contentDisposition, mimeType, contentLength);
+        }
     }
 
     @Override
     public boolean onCreateWindow(boolean isDialog, boolean isUserGesture) {
         if (isDialog) return false;
-        
+
         XWalkUIClientInternal.InitiateByInternal initiator =
                 XWalkUIClientInternal.InitiateByInternal.BY_JAVASCRIPT;
         if (isUserGesture) {
@@ -426,6 +453,14 @@ class XWalkContentsClientBridge extends XWalkContentsClient
     }
 
     @Override
+    public void onShowCustomView(View view, int requestedOrientation,
+            XWalkWebChromeClient.CustomViewCallback callback) {
+        if (mXWalkWebChromeClient != null && isOwnerActivityRunning()) {
+            mXWalkWebChromeClient.onShowCustomView(view, requestedOrientation, callback);
+        }
+    }
+
+    @Override
     public void onHideCustomView() {
         if (mXWalkWebChromeClient != null && isOwnerActivityRunning()) {
             mXWalkWebChromeClient.onHideCustomView();
@@ -464,18 +499,7 @@ class XWalkContentsClientBridge extends XWalkContentsClient
     }
 
     @Override
-    public boolean shouldOpenWithDefaultBrowser(String contentUrl) {
-        Intent intent = new Intent();
-        intent.setAction("android.intent.action.VIEW");
-        Uri url = Uri.parse(contentUrl);
-        intent.setData(url);
-        try {
-            mXWalkView.getActivity().startActivity(intent);
-        } catch (ActivityNotFoundException exception) {
-            Log.w(TAG, "Activity not found for Intent:");
-            return false;
-        }
-
+    public boolean shouldCreateWebContents(String contentUrl) {
         return true;
     }
 
@@ -641,15 +665,10 @@ class XWalkContentsClientBridge extends XWalkContentsClient
     }
 
     @CalledByNative
-    private void updateNotificationIcon(int notificationId, Bitmap icon) {
-        mNotificationService.updateNotificationIcon(notificationId, icon);
-    }
-
-    @CalledByNative
     private void showNotification(String title, String message, String replaceId,
-            int notificationId) {
+            Bitmap icon, int notificationId) {
         mNotificationService.showNotification(
-                title, message, replaceId, notificationId);
+                title, message, replaceId, icon, notificationId);
     }
 
     @CalledByNative
@@ -677,11 +696,6 @@ class XWalkContentsClientBridge extends XWalkContentsClient
         nativeNotificationDisplayed(mNativeContentsClientBridge, id);
     }
 
-    public void notificationError(int id) {
-        if (mNativeContentsClientBridge == 0) return;
-        nativeNotificationError(mNativeContentsClientBridge, id);
-    }
-
     public void notificationClicked(int id) {
         if (mNativeContentsClientBridge == 0) return;
         nativeNotificationClicked(mNativeContentsClientBridge, id);
@@ -692,7 +706,7 @@ class XWalkContentsClientBridge extends XWalkContentsClient
         nativeNotificationClosed(mNativeContentsClientBridge, id, byUser);
     }
 
-    void setDownloadListener(DownloadListener listener) {
+    void setDownloadListener(XWalkDownloadListenerInternal listener) {
         mDownloadListener = listener;
     }
 
@@ -741,7 +755,6 @@ class XWalkContentsClientBridge extends XWalkContentsClient
     private native void nativeCancelJsResult(long nativeXWalkContentsClientBridge, int id);
     private native void nativeExitFullscreen(long nativeXWalkContentsClientBridge, long nativeWebContents);
     private native void nativeNotificationDisplayed(long nativeXWalkContentsClientBridge, int id);
-    private native void nativeNotificationError(long nativeXWalkContentsClientBridge, int id);
     private native void nativeNotificationClicked(long nativeXWalkContentsClientBridge, int id);
     private native void nativeNotificationClosed(long nativeXWalkContentsClientBridge, int id, boolean byUser);
     private native void nativeOnFilesSelected(long nativeXWalkContentsClientBridge,

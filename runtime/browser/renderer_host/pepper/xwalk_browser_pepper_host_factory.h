@@ -17,13 +17,13 @@ class XWalkBrowserPepperHostFactory : public ppapi::host::HostFactory {
  public:
   // Non-owning pointer to the filter must outlive this class.
   explicit XWalkBrowserPepperHostFactory(content::BrowserPpapiHost* host);
-  virtual ~XWalkBrowserPepperHostFactory();
+  ~XWalkBrowserPepperHostFactory() override;
 
-  virtual scoped_ptr<ppapi::host::ResourceHost> CreateResourceHost(
+  scoped_ptr<ppapi::host::ResourceHost> CreateResourceHost(
       ppapi::host::PpapiHost* host,
-      const ppapi::proxy::ResourceMessageCallParams& params,
+      PP_Resource resource,
       PP_Instance instance,
-      const IPC::Message& message) OVERRIDE;
+      const IPC::Message& message) override;
 
  private:
   // Non-owning pointer.

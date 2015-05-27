@@ -12,7 +12,6 @@
         '../../../sql/sql.gyp:sql',
         '../../../url/url.gyp:url_lib',
         '../../../third_party/libxml/libxml.gyp:libxml',
-        '../../../third_party/re2/re2.gyp:re2',
         '../../../third_party/zlib/google/zip.gyp:zip',
       ],
       'sources': [
@@ -43,7 +42,6 @@
         'permission_policy_manager.cc',
         'permission_policy_manager.h',
         'permission_types.h',
-        'signature_types.h',
         'package/package.h',
         'package/package.cc',
         'package/wgt_package.h',
@@ -54,24 +52,24 @@
       'conditions': [
         ['tizen==1', {
           'dependencies': [
+            '../../../base/base.gyp:xdg_mime',
             '../../build/system.gyp:tizen',
+            '../../build/system.gyp:xmlsec',
             '../../tizen/xwalk_tizen.gypi:xwalk_tizen_lib',
             '../../../third_party/re2/re2.gyp:re2',
             '../../../net/net.gyp:net',
           ],
-          'cflags': [
-            '<!@(pkg-config --cflags xmlsec1)',
-          ],
-          'link_settings': {
-            'libraries': [
-              '<!@(pkg-config --libs-only-l xmlsec1)',
-            ],
-          },
           'sources': [
+            'manifest_handlers/tizen_app_control_handler.cc',
+            'manifest_handlers/tizen_app_control_handler.h',
             'manifest_handlers/tizen_application_handler.cc',
             'manifest_handlers/tizen_application_handler.h',
             'manifest_handlers/tizen_appwidget_handler.cc',
             'manifest_handlers/tizen_appwidget_handler.h',
+            'manifest_handlers/tizen_category_handler.cc',
+            'manifest_handlers/tizen_category_handler.h',
+            'manifest_handlers/tizen_ime_handler.cc',
+            'manifest_handlers/tizen_ime_handler.h',
             'manifest_handlers/tizen_metadata_handler.cc',
             'manifest_handlers/tizen_metadata_handler.h',
             'manifest_handlers/tizen_navigation_handler.cc',
@@ -80,6 +78,8 @@
             'manifest_handlers/tizen_setting_handler.h',
             'manifest_handlers/tizen_splash_screen_handler.cc',
             'manifest_handlers/tizen_splash_screen_handler.h',
+            'tizen/app_control_info.cc',
+            'tizen/app_control_info.h',
             'tizen/application_storage.cc',
             'tizen/application_storage.h',
             'tizen/application_storage_impl.cc',

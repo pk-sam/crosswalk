@@ -14,6 +14,7 @@
 #include "xwalk/test/base/xwalk_test_utils.h"
 
 using namespace xwalk::extensions;  // NOLINT
+using xwalk::Runtime;
 
 namespace {
 
@@ -21,7 +22,7 @@ class SysAppsRawSocketTestInstance : public XWalkExtensionInstance {
  public:
   SysAppsRawSocketTestInstance() {}
 
-  virtual void HandleMessage(scoped_ptr<base::Value> msg) OVERRIDE {}
+  void HandleMessage(scoped_ptr<base::Value> msg) override {}
 };
 
 class SysAppsRawSocketTestExtension : public XWalkExtension {
@@ -32,14 +33,14 @@ class SysAppsRawSocketTestExtension : public XWalkExtension {
         "exports.v8tools = requireNative('v8tools');");
   }
 
-  virtual XWalkExtensionInstance* CreateInstance() OVERRIDE {
+  XWalkExtensionInstance* CreateInstance() override {
     return new SysAppsRawSocketTestInstance();
   }
 };
 
 class SysAppsRawSocketTest : public InProcessBrowserTest {
  public:
-  virtual void SetUp() {
+  void SetUp() override {
     XWalkExtensionService::SetCreateUIThreadExtensionsCallbackForTesting(
         base::Bind(&SysAppsRawSocketTest::CreateExtensions,
                    base::Unretained(this)));
@@ -57,8 +58,8 @@ IN_PROC_BROWSER_TEST_F(SysAppsRawSocketTest, SysAppsRawSocket) {
   const base::string16 passString = base::ASCIIToUTF16("Pass");
   const base::string16 failString = base::ASCIIToUTF16("Fail");
 
-  content::RunAllPendingInMessageLoop();
-  content::TitleWatcher title_watcher(runtime()->web_contents(), passString);
+  Runtime* runtime = CreateRuntime();
+  content::TitleWatcher title_watcher(runtime->web_contents(), passString);
   title_watcher.AlsoWaitForTitle(failString);
 
   base::FilePath test_file;
@@ -69,6 +70,6 @@ IN_PROC_BROWSER_TEST_F(SysAppsRawSocketTest, SysAppsRawSocket) {
       .Append(FILE_PATH_LITERAL("raw_socket"))
       .Append(FILE_PATH_LITERAL("raw_socket_api_browsertest.html"));
 
-  xwalk_test_utils::NavigateToURL(runtime(), net::FilePathToFileURL(test_file));
+  xwalk_test_utils::NavigateToURL(runtime, net::FilePathToFileURL(test_file));
   EXPECT_EQ(passString, title_watcher.WaitAndGetTitle());
 }

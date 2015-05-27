@@ -11,6 +11,7 @@
 #include "xwalk/test/base/xwalk_test_utils.h"
 
 using namespace xwalk::extensions;  // NOLINT
+using xwalk::Runtime;
 
 namespace {
 
@@ -25,7 +26,7 @@ class OuterInstance : public XWalkExtensionInstance {
   OuterInstance() {
     g_outer_extension_loaded = true;
   }
-  virtual void HandleMessage(scoped_ptr<base::Value> msg) OVERRIDE {}
+  void HandleMessage(scoped_ptr<base::Value> msg) override {}
 };
 
 class OuterExtension : public XWalkExtension {
@@ -35,7 +36,7 @@ class OuterExtension : public XWalkExtension {
     set_javascript_api("exports.value = true");
   }
 
-  virtual XWalkExtensionInstance* CreateInstance() OVERRIDE {
+  XWalkExtensionInstance* CreateInstance() override {
     return new OuterInstance;
   }
 };
@@ -45,7 +46,7 @@ class InnerInstance : public XWalkExtensionInstance {
   InnerInstance() {
     g_inner_extension_loaded = true;
   }
-  virtual void HandleMessage(scoped_ptr<base::Value> msg) OVERRIDE {}
+  void HandleMessage(scoped_ptr<base::Value> msg) override {}
 };
 
 class InnerExtension : public XWalkExtension {
@@ -55,7 +56,7 @@ class InnerExtension : public XWalkExtension {
     set_javascript_api("exports.value = true;");
   }
 
-  virtual XWalkExtensionInstance* CreateInstance() OVERRIDE {
+  XWalkExtensionInstance* CreateInstance() override {
     return new InnerInstance;
   }
 };
@@ -65,7 +66,7 @@ class AnotherInstance : public XWalkExtensionInstance {
   AnotherInstance() {
     g_another_extension_loaded = true;
   }
-  virtual void HandleMessage(scoped_ptr<base::Value> msg) OVERRIDE {}
+  void HandleMessage(scoped_ptr<base::Value> msg) override {}
 };
 
 class AnotherExtension : public XWalkExtension {
@@ -81,15 +82,15 @@ class AnotherExtension : public XWalkExtension {
                        "}");
   }
 
-  virtual XWalkExtensionInstance* CreateInstance() OVERRIDE {
+  XWalkExtensionInstance* CreateInstance() override {
     return new AnotherInstance;
   }
 };
 
 class XWalkExtensionsNestedNamespaceTest : public XWalkExtensionsTestBase {
  public:
-  virtual void CreateExtensionsForUIThread(
-      XWalkExtensionVector* extensions) OVERRIDE {
+  void CreateExtensionsForUIThread(
+      XWalkExtensionVector* extensions) override {
     extensions->push_back(new OuterExtension);
     extensions->push_back(new InnerExtension);
   }
@@ -97,8 +98,8 @@ class XWalkExtensionsNestedNamespaceTest : public XWalkExtensionsTestBase {
 
 class XWalkExtensionsTrampolinesForNested : public XWalkExtensionsTestBase {
  public:
-  virtual void CreateExtensionsForUIThread(
-      XWalkExtensionVector* extensions) OVERRIDE {
+  void CreateExtensionsForUIThread(
+      XWalkExtensionVector* extensions) override {
     extensions->push_back(new OuterExtension);
     extensions->push_back(new InnerExtension);
     extensions->push_back(new AnotherExtension);
@@ -107,13 +108,13 @@ class XWalkExtensionsTrampolinesForNested : public XWalkExtensionsTestBase {
 
 IN_PROC_BROWSER_TEST_F(XWalkExtensionsNestedNamespaceTest,
                        InstanceCreatedForInnerExtension) {
-  content::RunAllPendingInMessageLoop();
+  Runtime* runtime = CreateRuntime();
   GURL url = GetExtensionsTestURL(base::FilePath(),
       base::FilePath().AppendASCII("inner_outer.html"));
 
-  content::TitleWatcher title_watcher(runtime()->web_contents(), kPassString);
+  content::TitleWatcher title_watcher(runtime->web_contents(), kPassString);
   title_watcher.AlsoWaitForTitle(kFailString);
-  xwalk_test_utils::NavigateToURL(runtime(), url);
+  xwalk_test_utils::NavigateToURL(runtime, url);
   EXPECT_EQ(kPassString, title_watcher.WaitAndGetTitle());
 
   EXPECT_TRUE(g_outer_extension_loaded);
@@ -122,13 +123,13 @@ IN_PROC_BROWSER_TEST_F(XWalkExtensionsNestedNamespaceTest,
 
 IN_PROC_BROWSER_TEST_F(XWalkExtensionsNestedNamespaceTest,
                        InstanceNotCreatedForUnusedInnerExtension) {
-  content::RunAllPendingInMessageLoop();
+  Runtime* runtime = CreateRuntime();
   GURL url = GetExtensionsTestURL(base::FilePath(),
       base::FilePath().AppendASCII("outer.html"));
 
-  content::TitleWatcher title_watcher(runtime()->web_contents(), kPassString);
+  content::TitleWatcher title_watcher(runtime->web_contents(), kPassString);
   title_watcher.AlsoWaitForTitle(kFailString);
-  xwalk_test_utils::NavigateToURL(runtime(), url);
+  xwalk_test_utils::NavigateToURL(runtime, url);
   EXPECT_EQ(kPassString, title_watcher.WaitAndGetTitle());
 
   EXPECT_TRUE(g_outer_extension_loaded);
@@ -137,13 +138,13 @@ IN_PROC_BROWSER_TEST_F(XWalkExtensionsNestedNamespaceTest,
 
 IN_PROC_BROWSER_TEST_F(XWalkExtensionsTrampolinesForNested,
                        InstanceCreatedForExtensionUsedByAnother) {
-  content::RunAllPendingInMessageLoop();
+  Runtime* runtime = CreateRuntime();
   GURL url = GetExtensionsTestURL(base::FilePath(),
       base::FilePath().AppendASCII("another.html"));
 
-  content::TitleWatcher title_watcher(runtime()->web_contents(), kPassString);
+  content::TitleWatcher title_watcher(runtime->web_contents(), kPassString);
   title_watcher.AlsoWaitForTitle(kFailString);
-  xwalk_test_utils::NavigateToURL(runtime(), url);
+  xwalk_test_utils::NavigateToURL(runtime, url);
   EXPECT_EQ(kPassString, title_watcher.WaitAndGetTitle());
 
   EXPECT_TRUE(g_another_extension_loaded);

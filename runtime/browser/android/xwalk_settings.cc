@@ -17,6 +17,7 @@
 #include "content/public/common/web_preferences.h"
 #include "jni/XWalkSettings_jni.h"
 #include "xwalk/runtime/common/xwalk_content_client.h"
+#include "xwalk/runtime/common/xwalk_switches.h"
 #include "xwalk/runtime/browser/android/renderer_host/xwalk_render_view_host_ext.h"
 #include "xwalk/runtime/browser/android/xwalk_content.h"
 
@@ -35,7 +36,7 @@ struct XWalkSettings::FieldIds {
   // JNI is ineffective and should not be used. Please keep in mind that in the
   // legacy WebView the whole Sync method took <1ms on Xoom, and no one is
   // expected to modify settings in performance-critical code.
-  FieldIds() { }
+  FieldIds() = default;
 
   explicit FieldIds(JNIEnv* env) {
     const char* kStringClassName = "Ljava/lang/String;";
@@ -87,9 +88,10 @@ struct XWalkSettings::FieldIds {
   jfieldID default_video_poster_url;
 };
 
-XWalkSettings::XWalkSettings(JNIEnv* env, jobject obj, jlong web_contents)
-    : WebContentsObserver(
-          reinterpret_cast<content::WebContents*>(web_contents)),
+XWalkSettings::XWalkSettings(JNIEnv* env,
+                             jobject obj,
+                             content::WebContents* web_contents)
+    : WebContentsObserver(web_contents),
       xwalk_settings_(env, obj) {
 }
 
@@ -198,6 +200,12 @@ void XWalkSettings::UpdateWebkitPreferences(JNIEnv* env, jobject obj) {
   prefs.user_gesture_required_for_media_playback = env->GetBooleanField(
       obj, field_ids_->media_playback_requires_user_gesture);
 
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  prefs.allow_running_insecure_content =
+      command_line->HasSwitch(switches::kAllowRunningInsecureContent);
+  prefs.allow_displaying_insecure_content =
+      !command_line->HasSwitch(switches::kNoDisplayingInsecureContent);
+
   ScopedJavaLocalRef<jstring> str;
   str.Reset(
       env, static_cast<jstring>(
@@ -226,8 +234,10 @@ void XWalkSettings::RenderViewCreated(
 
 static jlong Init(JNIEnv* env,
                  jobject obj,
-                 jlong web_contents) {
-  XWalkSettings* settings = new XWalkSettings(env, obj, web_contents);
+                 jobject web_contents) {
+  content::WebContents* contents = content::WebContents::FromJavaWebContents(
+      web_contents);
+  XWalkSettings* settings = new XWalkSettings(env, obj, contents);
   return reinterpret_cast<intptr_t>(settings);
 }
 

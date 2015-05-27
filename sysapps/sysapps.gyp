@@ -48,7 +48,6 @@
         'device_capabilities/device_capabilities_object.h',
         'device_capabilities/display_info_provider.cc',
         'device_capabilities/display_info_provider.h',
-        'device_capabilities/display_info_provider_android.cc',
         'device_capabilities/memory_info_provider.cc',
         'device_capabilities/memory_info_provider.h',
         'device_capabilities/storage_info_provider.cc',
@@ -74,7 +73,6 @@
         ['OS!="android"', {
           'dependencies': [
             '../../components/components.gyp:storage_monitor',
-            '../../content/content.gyp:content_common',
             '../../media/media.gyp:media',
             '../../third_party/ffmpeg/ffmpeg.gyp:ffmpeg',
           ],
@@ -85,6 +83,13 @@
             'device_capabilities/storage_info_provider_chromium.h',
           ],
         }],
+        ['OS=="win"', {
+          'link_settings': {
+            'libraries': [
+              '-lPdh.lib',
+            ],
+          },
+        }]
       ],
       'direct_dependent_settings': {
         'include_dirs': [

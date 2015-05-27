@@ -9,23 +9,20 @@
 
 #include "base/event_types.h"
 #include "xwalk/application/browser/application.h"
+#include "xwalk/application/common/tizen/app_control_info.h"
 #include "xwalk/application/common/tizen/cookie_manager.h"
 
-#if defined(USE_OZONE)
 #include "ui/events/platform/platform_event_observer.h"
 #include "ui/events/platform/platform_event_types.h"
-#endif
 
 namespace xwalk {
 namespace application {
 
 class ApplicationTizen :  // NOLINT
-#if defined(USE_OZONE)
   public ui::PlatformEventObserver,
-#endif
   public Application {
  public:
-  virtual ~ApplicationTizen();
+  ~ApplicationTizen() override;
   void Hide();
   void Show();
   void Suspend();
@@ -34,22 +31,25 @@ class ApplicationTizen :  // NOLINT
   void RemoveAllCookies();
   void SetUserAgentString(const std::string& user_agent_string);
 
+ protected:
+  GURL GetStartURL(Manifest::Type type) const override;
+
  private:
   friend class Application;
   ApplicationTizen(scoped_refptr<ApplicationData> data,
-                   RuntimeContext* context);
-  virtual bool Launch(const LaunchParams& launch_params) OVERRIDE;
+                   XWalkBrowserContext* context);
+  bool Launch() override;
 
-  virtual base::FilePath GetSplashScreenPath() OVERRIDE;
+  GURL GetAppControlStartURL(const AppControlInfo& app_control) const;
+
+  base::FilePath GetSplashScreenPath() override;
 
   // Runtime::Observer implementation.
-  virtual void OnRuntimeAdded(Runtime* runtime) OVERRIDE;
-  virtual void OnRuntimeRemoved(Runtime* runtime) OVERRIDE;
+  void OnNewRuntimeAdded(Runtime* runtime) override;
+  void OnRuntimeClosed(Runtime* runtime) override;
 
-#if defined(USE_OZONE)
-  virtual void WillProcessEvent(const ui::PlatformEvent& event) OVERRIDE;
-  virtual void DidProcessEvent(const ui::PlatformEvent& event) OVERRIDE;
-#endif
+  void WillProcessEvent(const ui::PlatformEvent& event) override;
+  void DidProcessEvent(const ui::PlatformEvent& event) override;
   bool CanBeSuspended() const;
 
 #if defined(OS_TIZEN_MOBILE)

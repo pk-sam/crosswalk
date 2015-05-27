@@ -10,8 +10,8 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/file_util.h"
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "cc/base/switches.h"
@@ -27,8 +27,9 @@
 #include "xwalk/application/browser/application_system.h"
 #include "xwalk/extensions/browser/xwalk_extension_service.h"
 #include "xwalk/extensions/common/xwalk_extension_switches.h"
-#include "xwalk/runtime/browser/runtime.h"
-#include "xwalk/runtime/browser/runtime_context.h"
+#if defined(USE_GTK_UI)
+#include "xwalk/runtime/browser/ui/gtk2_ui.h"
+#endif
 #include "xwalk/runtime/browser/xwalk_runner.h"
 #include "xwalk/runtime/common/xwalk_runtime_features.h"
 #include "xwalk/runtime/common/xwalk_switches.h"
@@ -40,15 +41,24 @@
 #endif
 
 #if defined(USE_AURA) && defined(USE_X11)
+#include "ui/events/devices/x11/touch_factory_x11.h"
+#endif
+
+#if !defined(OS_CHROMEOS) && defined(USE_AURA) && defined(OS_LINUX)
 #include "ui/base/ime/input_method_initializer.h"
-#include "ui/events/x/touch_factory_x11.h"
+#endif
+
+#if defined(USE_WEBUI_FILE_PICKER)
+#include "ui/wm/core/wm_state.h"
+#include "xwalk/runtime/browser/ui/linux_webui/linux_webui.h"
+#include "xwalk/runtime/browser/ui/webui/xwalk_web_ui_controller_factory.h"
 #endif
 
 namespace {
 
 // FIXME: Compare with method in startup_browser_creator.cc.
-GURL GetURLFromCommandLine(const CommandLine& command_line) {
-  const CommandLine::StringVector& args = command_line.GetArgs();
+GURL GetURLFromCommandLine(const base::CommandLine& command_line) {
+  const base::CommandLine::StringVector& args = command_line.GetArgs();
 
   if (args.empty())
     return GURL();
@@ -76,6 +86,7 @@ namespace xwalk {
 XWalkBrowserMainParts::XWalkBrowserMainParts(
     const content::MainFunctionParams& parameters)
     : xwalk_runner_(XWalkRunner::GetInstance()),
+      extension_service_(NULL),
       startup_url_(url::kAboutBlankURL),
       parameters_(parameters),
       run_default_message_loop_(true) {
@@ -88,7 +99,8 @@ XWalkBrowserMainParts::XWalkBrowserMainParts(
   // switches::kDisableSetuidSandbox is not being used here because it
   // doesn't have the CONTENT_EXPORT macro despite the fact it is exposed by
   // content_switches.h.
-  CommandLine::ForCurrentProcess()->AppendSwitch("disable-setuid-sandbox");
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      "disable-setuid-sandbox");
 #endif
 }
 
@@ -96,7 +108,7 @@ XWalkBrowserMainParts::~XWalkBrowserMainParts() {
 }
 
 void XWalkBrowserMainParts::PreMainMessageLoopStart() {
-  CommandLine* command_line = CommandLine::ForCurrentProcess();
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   command_line->AppendSwitch(switches::kEnableViewport);
 
   command_line->AppendSwitch(xswitches::kEnableOverlayScrollbars);
@@ -124,8 +136,16 @@ void XWalkBrowserMainParts::PostMainMessageLoopStart() {
 }
 
 void XWalkBrowserMainParts::PreEarlyInitialization() {
-#if defined(USE_AURA) && defined(USE_X11)
-    ui::InitializeInputMethodForTesting();
+#if !defined(OS_CHROMEOS) && defined(USE_AURA) && defined(OS_LINUX)
+  ui::InitializeInputMethodForTesting();
+#if defined(USE_WEBUI_FILE_PICKER)
+  ui::LinuxShellDialog::SetInstance(BuildWebUI());
+  wm_state_.reset(new wm::WMState);
+#elif defined(USE_GTK_UI)
+  views::LinuxUI* gtk2_ui = BuildGtk2UI();
+  gtk2_ui->Initialize();
+  views::LinuxUI::SetInstance(gtk2_ui);
+#endif
 #endif
 }
 
@@ -134,7 +154,7 @@ int XWalkBrowserMainParts::PreCreateThreads() {
 }
 
 void XWalkBrowserMainParts::RegisterExternalExtensions() {
-  CommandLine* cmd_line = CommandLine::ForCurrentProcess();
+  base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
 
 #if defined(OS_TIZEN)
   std::string value = cmd_line->GetSwitchValueASCII(
@@ -197,7 +217,7 @@ void XWalkBrowserMainParts::PreMainMessageLoopRun() {
       base::Bind(nacl::NaClProcessHost::EarlyStartup));
 #endif
 
-  CommandLine* command_line = CommandLine::ForCurrentProcess();
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(switches::kRemoteDebuggingPort)) {
     std::string port_str =
         command_line->GetSwitchValueASCII(switches::kRemoteDebuggingPort);
@@ -208,16 +228,20 @@ void XWalkBrowserMainParts::PreMainMessageLoopRun() {
 
   NativeAppWindow::Initialize();
 
+#if defined(USE_WEBUI_FILE_PICKER)
+  content::WebUIControllerFactory::RegisterFactory(
+      XWalkWebUIControllerFactory::GetInstance());
+#endif
+
   if (command_line->HasSwitch(switches::kListFeaturesFlags)) {
     XWalkRuntimeFeatures::GetInstance()->DumpFeaturesFlags();
     run_default_message_loop_ = false;
     return;
   }
 
-#if !defined(SHARED_PROCESS_MODE)
   application::ApplicationSystem* app_system = xwalk_runner_->app_system();
-  app_system->LaunchFromCommandLine(*command_line, startup_url_,
-                                    run_default_message_loop_);
+  run_default_message_loop_ = app_system->LaunchFromCommandLine(
+      *command_line, startup_url_);
   // If the |ui_task| is specified in main function parameter, it indicates
   // that we will run this UI task instead of running the the default main
   // message loop. See |content::BrowserTestBase::SetUp| for |ui_task| usage
@@ -227,7 +251,6 @@ void XWalkBrowserMainParts::PreMainMessageLoopRun() {
     delete parameters_.ui_task;
     run_default_message_loop_ = false;
   }
-#endif
 }
 
 bool XWalkBrowserMainParts::MainMessageLoopRun(int* result_code) {

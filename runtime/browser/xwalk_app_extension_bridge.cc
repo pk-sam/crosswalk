@@ -7,21 +7,19 @@
 #include <string>
 
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/notification_service.h"
 #include "xwalk/application/browser/application.h"
 #include "xwalk/application/browser/application_service.h"
 #include "xwalk/application/browser/application_system.h"
 
-#if defined(OS_LINUX)
-#include "xwalk/application/browser/application_system_linux.h"
-#include "xwalk/application/browser/application_service_provider_linux.h"
-#include "xwalk/application/browser/linux/running_application_object.h"
-#endif
-#include "xwalk/runtime/browser/runtime_defered_ui_strategy.h"
-
 namespace xwalk {
 
+using application::Application;
+using application::ApplicationService;
+using application::ApplicationSystem;
+
 XWalkAppExtensionBridge::XWalkAppExtensionBridge()
-    : app_system_(NULL) {
+    : app_system_(nullptr) {
 }
 
 XWalkAppExtensionBridge::~XWalkAppExtensionBridge() {}
@@ -62,40 +60,11 @@ bool XWalkAppExtensionBridge::RegisterPermissions(
   return service->RegisterPermissions(app->id(), extension_name, perm_table);
 }
 
-void XWalkAppExtensionBridge::ExtensionProcessCreated(
-    int render_process_id,
-    const IPC::ChannelHandle& channel_handle) {
-#if defined(OS_LINUX)
+Application* XWalkAppExtensionBridge::GetApplication(int render_process_id) {
   CHECK(app_system_);
-  application::ApplicationService* service = app_system_->application_service();
-  application::Application* app =
-      service->GetApplicationByRenderHostID(render_process_id);
-  CHECK(app);
-
-  application::ApplicationSystemLinux* app_system =
-      static_cast<application::ApplicationSystemLinux*>(app_system_);
-  application::RunningApplicationObject* running_app_object =
-      app_system->service_provider()->GetRunningApplicationObject(app);
-  CHECK(running_app_object);
-  running_app_object->ExtensionProcessCreated(channel_handle);
-#endif
-}
-
-void XWalkAppExtensionBridge::RenderChannelCreated(
-    int render_process_id) {
-  CHECK(app_system_);
-  application::ApplicationService *service =
+  ApplicationService* service =
       app_system_->application_service();
-  application::Application *app =
-      service->GetApplicationByRenderHostID(render_process_id);
-  if (!app)
-    return;
-
-  content::BrowserThread::PostTask(
-      content::BrowserThread::UI,
-      FROM_HERE,
-      base::Bind(
-          &RuntimeDeferedUIStrategy::ShowStoredRuntimes,
-          base::Unretained(ToRuntimeDeferedUIStrategy(app->ui_strategy()))));
+  return service->GetApplicationByRenderHostID(render_process_id);
 }
+
 }  // namespace xwalk

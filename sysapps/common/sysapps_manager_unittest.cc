@@ -5,8 +5,8 @@
 #include "xwalk/sysapps/common/sysapps_manager.h"
 
 #include "base/command_line.h"
-#include "base/file_util.h"
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "base/stl_util.h"
@@ -48,12 +48,12 @@ class DummyExtension : public XWalkExtension {
  public:
   DummyExtension() {}
 
-  virtual XWalkExtensionInstance* CreateInstance() OVERRIDE {
+  XWalkExtensionInstance* CreateInstance() override {
     return NULL;
   }
 };
 
-int CountExtensions(SysAppsManager* manager) {
+size_t CountExtensions(SysAppsManager* manager) {
   XWalkExtensionVector extensions;
   STLElementDeleter<XWalkExtensionVector> deleter(&extensions);
   manager->CreateExtensionsForExtensionThread(&extensions);
@@ -65,17 +65,17 @@ int CountExtensions(SysAppsManager* manager) {
 
 TEST_F(XWalkSysAppsManagerTest, DisableDeviceCapabilities) {
   SysAppsManager manager;
-  int count_before_disable = CountExtensions(&manager);
+  size_t count_before_disable = CountExtensions(&manager);
   manager.DisableDeviceCapabilities();
-  int count_after_disable = CountExtensions(&manager);
+  size_t count_after_disable = CountExtensions(&manager);
   EXPECT_EQ(count_before_disable, count_after_disable + 1);
 }
 
 TEST_F(XWalkSysAppsManagerTest, DisableRawSockets) {
   SysAppsManager manager;
-  int count_before_disable = CountExtensions(&manager);
+  size_t count_before_disable = CountExtensions(&manager);
   manager.DisableRawSockets();
-  int count_after_disable = CountExtensions(&manager);
+  size_t count_after_disable = CountExtensions(&manager);
   EXPECT_EQ(count_before_disable, count_after_disable + 1);
 }
 

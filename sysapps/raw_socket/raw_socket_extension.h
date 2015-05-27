@@ -19,11 +19,11 @@ using extensions::XWalkExtensionInstance;
 
 class RawSocketExtension : public XWalkExtension {
  public:
-  explicit RawSocketExtension();
-  virtual ~RawSocketExtension();
+  RawSocketExtension();
+  ~RawSocketExtension() override;
 
   // XWalkExtension implementation.
-  virtual XWalkExtensionInstance* CreateInstance() OVERRIDE;
+  XWalkExtensionInstance* CreateInstance() override;
 };
 
 class RawSocketInstance : public XWalkExtensionInstance {
@@ -31,7 +31,7 @@ class RawSocketInstance : public XWalkExtensionInstance {
   RawSocketInstance();
 
   // XWalkExtensionInstance implementation.
-  virtual void HandleMessage(scoped_ptr<base::Value> msg) OVERRIDE;
+  void HandleMessage(scoped_ptr<base::Value> msg) override;
 
   void AddBindingObject(const std::string& object_id,
                         scoped_ptr<BindingObject> obj);

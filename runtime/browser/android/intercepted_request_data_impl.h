@@ -21,16 +21,16 @@ class InterceptedRequestDataImpl : public InterceptedRequestData {
  public:
   explicit InterceptedRequestDataImpl(
       const base::android::JavaRef<jobject>& obj);
-  virtual ~InterceptedRequestDataImpl();
+  ~InterceptedRequestDataImpl() override;
 
   virtual scoped_ptr<InputStream> GetInputStream(JNIEnv* env) const;
   virtual bool GetMimeType(JNIEnv* env, std::string* mime_type) const;
   virtual bool GetCharset(JNIEnv* env, std::string* charset) const;
   virtual bool GetPackageName(JNIEnv* env, std::string* name) const;
 
-  virtual net::URLRequestJob* CreateJobFor(
+  net::URLRequestJob* CreateJobFor(
       net::URLRequest* request,
-      net::NetworkDelegate* network_delegate) const OVERRIDE;
+      net::NetworkDelegate* network_delegate) const override;
 
  private:
   base::android::ScopedJavaGlobalRef<jobject> java_object_;

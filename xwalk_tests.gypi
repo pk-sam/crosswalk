@@ -11,13 +11,6 @@
         'sysapps/sysapps_tests.gyp:xwalk_sysapps_browsertest',
         'sysapps/sysapps_tests.gyp:xwalk_sysapps_unittest',
       ],
-      'conditions': [
-        ['OS=="linux"', {
-          'dependencies': [
-            'dbus/xwalk_dbus.gyp:xwalk_dbus_unittests',
-          ],
-        }],
-      ],
     },
     {
       'target_name': 'xwalk_unittest',
@@ -59,6 +52,8 @@
         }],
         ['tizen==1', {
           'sources': [
+            'application/common/manifest_handlers/tizen_appwidget_handler_unittest.cc',
+            'application/common/manifest_handlers/tizen_metadata_handler_unittest.cc',
             'application/common/manifest_handlers/tizen_navigation_handler_unittest.cc',
           ],
         }],

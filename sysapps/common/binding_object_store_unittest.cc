@@ -32,7 +32,7 @@ scoped_ptr<XWalkExtensionFunctionInfo> CreateFunctionInfo(
 class BindingObjectTest : public BindingObject {
  public:
   static scoped_ptr<BindingObject> Create() {
-    return make_scoped_ptr(new BindingObjectTest()).PassAs<BindingObject>();
+    return make_scoped_ptr(new BindingObjectTest()).Pass();
   }
 
   BindingObjectTest() : call_count_(0) {
@@ -42,7 +42,7 @@ class BindingObjectTest : public BindingObject {
         base::Bind(&BindingObjectTest::OnTest, base::Unretained(this)));
   }
 
-  virtual ~BindingObjectTest() {
+  ~BindingObjectTest() override {
     instance_count_--;
   }
 

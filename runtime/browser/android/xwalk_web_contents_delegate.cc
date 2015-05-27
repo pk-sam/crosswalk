@@ -15,14 +15,15 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/common/file_chooser_file_info.h"
 #include "content/public/common/file_chooser_params.h"
 #include "jni/XWalkWebContentsDelegate_jni.h"
 #include "xwalk/runtime/browser/media/media_capture_devices_dispatcher.h"
 #include "xwalk/runtime/browser/runtime_file_select_helper.h"
 #include "xwalk/runtime/browser/runtime_javascript_dialog_manager.h"
-#include "ui/shell_dialogs/selected_file_info.h"
 
 using base::android::AttachCurrentThread;
+using base::android::ConvertUTF8ToJavaString;
 using base::android::ConvertUTF16ToJavaString;
 using base::android::ScopedJavaLocalRef;
 using content::FileChooserParams;
@@ -112,7 +113,7 @@ void XWalkWebContentsDelegate::RunFileChooser(
   if (params.mode == FileChooserParams::Save) {
     // Save not supported, so cancel it.
     web_contents->GetRenderViewHost()->FilesSelectedInChooser(
-         std::vector<ui::SelectedFileInfo>(),
+         std::vector<content::FileChooserFileInfo>(),
          params.mode);
     return;
   }
@@ -131,7 +132,7 @@ void XWalkWebContentsDelegate::RunFileChooser(
 }
 
 content::JavaScriptDialogManager*
-XWalkWebContentsDelegate::GetJavaScriptDialogManager() {
+XWalkWebContentsDelegate::GetJavaScriptDialogManager(WebContents* source) {
   if (!javascript_dialog_manager_.get()) {
     javascript_dialog_manager_.reset(new RuntimeJavaScriptDialogManager);
   }
@@ -162,6 +163,50 @@ void XWalkWebContentsDelegate::RendererResponsive(WebContents* source) {
   Java_XWalkWebContentsDelegate_rendererResponsive(env, obj.obj());
 }
 
+bool XWalkWebContentsDelegate::AddMessageToConsole(
+    content::WebContents* source,
+    int32 level,
+    const base::string16& message,
+    int32 line_no,
+    const base::string16& source_id) {
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> obj = GetJavaDelegate(env);
+  if (obj.is_null())
+    return WebContentsDelegate::AddMessageToConsole(
+        source, level, message, line_no, source_id);
+  ScopedJavaLocalRef<jstring> jmessage(ConvertUTF16ToJavaString(env, message));
+  ScopedJavaLocalRef<jstring> jsource_id(
+      ConvertUTF16ToJavaString(env, source_id));
+  int jlevel =
+      web_contents_delegate_android::WEB_CONTENTS_DELEGATE_LOG_LEVEL_DEBUG;
+  switch (level) {
+    case logging::LOG_VERBOSE:
+      jlevel =
+        web_contents_delegate_android::WEB_CONTENTS_DELEGATE_LOG_LEVEL_DEBUG;
+      break;
+    case logging::LOG_INFO:
+      jlevel =
+        web_contents_delegate_android::WEB_CONTENTS_DELEGATE_LOG_LEVEL_LOG;
+      break;
+    case logging::LOG_WARNING:
+      jlevel =
+        web_contents_delegate_android::WEB_CONTENTS_DELEGATE_LOG_LEVEL_WARNING;
+      break;
+    case logging::LOG_ERROR:
+      jlevel =
+        web_contents_delegate_android::WEB_CONTENTS_DELEGATE_LOG_LEVEL_ERROR;
+      break;
+    default:
+      NOTREACHED();
+  }
+  return Java_XWalkWebContentsDelegate_addMessageToConsole(env,
+      GetJavaDelegate(env).obj(),
+      jlevel,
+      jmessage.obj(),
+      line_no,
+      jsource_id.obj());
+}
+
 void XWalkWebContentsDelegate::HandleKeyboardEvent(
     content::WebContents* source,
     const content::NativeWebKeyboardEvent& event) {
@@ -175,16 +220,25 @@ void XWalkWebContentsDelegate::HandleKeyboardEvent(
   Java_XWalkWebContentsDelegate_handleKeyboardEvent(env, obj.obj(), key_event);
 }
 
-
-void XWalkWebContentsDelegate::ToggleFullscreenModeForTab(
+void XWalkWebContentsDelegate::EnterFullscreenModeForTab(
     content::WebContents* web_contents,
-    bool enter_fullscreen) {
+    const GURL&) {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = GetJavaDelegate(env);
   if (obj.is_null())
     return;
   Java_XWalkWebContentsDelegate_toggleFullscreen(
-      env, obj.obj(), enter_fullscreen);
+      env, obj.obj(), true);
+}
+
+void XWalkWebContentsDelegate::ExitFullscreenModeForTab(
+    content::WebContents* web_contents) {
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> obj = GetJavaDelegate(env);
+  if (obj.is_null())
+    return;
+  Java_XWalkWebContentsDelegate_toggleFullscreen(
+      env, obj.obj(), false);
 }
 
 bool XWalkWebContentsDelegate::IsFullscreenForTabOrPending(
@@ -199,24 +253,20 @@ bool XWalkWebContentsDelegate::IsFullscreenForTabOrPending(
 bool XWalkWebContentsDelegate::ShouldCreateWebContents(
     content::WebContents* web_contents,
     int route_id,
+    int main_frame_route_id,
     WindowContainerType window_container_type,
     const base::string16& frame_name,
     const GURL& target_url,
     const std::string& partition_id,
     content::SessionStorageNamespace* session_storage_namespace) {
   JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> java_delegate = GetJavaDelegate(env);
-
-  if (java_delegate.obj()) {
-    ScopedJavaLocalRef<jstring> url_buffer =
-        base::android::ConvertUTF8ToJavaString(env, target_url.spec());
-    return Java_XWalkWebContentsDelegate_shouldOpenWithDefaultBrowser(env,
-        java_delegate.obj(), url_buffer.obj()) == JNI_FALSE;
-  }
-
-  // As multiple windows mode has not been implemented yet, return false
-  // to make sure new WebContents won't be created.
-  return false;
+  ScopedJavaLocalRef<jobject> obj = GetJavaDelegate(env);
+  if (obj.is_null())
+    return true;
+  ScopedJavaLocalRef<jstring> java_url =
+      ConvertUTF8ToJavaString(env, target_url.spec());
+  return Java_XWalkWebContentsDelegate_shouldCreateWebContents(env, obj.obj(),
+      java_url.obj());
 }
 
 bool RegisterXWalkWebContentsDelegate(JNIEnv* env) {

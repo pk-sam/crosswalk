@@ -21,6 +21,7 @@
 #include "ipc/message_filter.h"
 #include "xwalk/extensions/common/xwalk_extension_messages.h"
 #include "xwalk/extensions/common/xwalk_extension_switches.h"
+#include "xwalk/runtime/browser/xwalk_runner.h"
 #include "xwalk/runtime/common/xwalk_switches.h"
 
 using content::BrowserThread;
@@ -52,7 +53,7 @@ class XWalkExtensionProcessHost::RenderProcessMessageFilter
 
  private:
   // IPC::ChannelProxy::MessageFilter implementation.
-  virtual bool OnMessageReceived(const IPC::Message& message) OVERRIDE {
+  bool OnMessageReceived(const IPC::Message& message) override {
     bool handled = true;
     IPC_BEGIN_MESSAGE_MAP(RenderProcessMessageFilter, message)
       IPC_MESSAGE_HANDLER_DELAY_REPLY(
@@ -69,7 +70,7 @@ class XWalkExtensionProcessHost::RenderProcessMessageFilter
       eph_->OnGetExtensionProcessChannel(scoped_reply.Pass());
   }
 
-  virtual ~RenderProcessMessageFilter() {}
+  ~RenderProcessMessageFilter() override {}
 
   XWalkExtensionProcessHost* eph_;
 };
@@ -83,21 +84,21 @@ class ExtensionSandboxedProcessLauncherDelegate
       : ipc_fd_(host->TakeClientFileDescriptor())
 #endif
   {}
-  virtual ~ExtensionSandboxedProcessLauncherDelegate() {}
+  ~ExtensionSandboxedProcessLauncherDelegate() override {}
 
 #if defined(OS_WIN)
-  virtual bool ShouldSandbox() OVERRIDE {
+  bool ShouldSandbox() override {
     return false;
   }
 #elif defined(OS_POSIX)
-  virtual int GetIpcFd() OVERRIDE {
-    return ipc_fd_;
+  base::ScopedFD TakeIpcFd() override {
+    return ipc_fd_.Pass();
   }
 #endif
 
  private:
 #if defined(OS_POSIX)
-  int ipc_fd_;
+  base::ScopedFD ipc_fd_;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionSandboxedProcessLauncherDelegate);
@@ -153,61 +154,42 @@ void XWalkExtensionProcessHost::StartProcess() {
   CHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
   CHECK(!process_ || !channel_);
 
-#if defined(SHARED_PROCESS_MODE)
-#if defined(OS_LINUX)
-    std::string channel_id =
-        IPC::Channel::GenerateVerifiedChannelID(std::string());
-    channel_ = IPC::Channel::CreateServer(channel_id, this);
-    if (!channel_->Connect())
-      NOTREACHED();
-    IPC::ChannelHandle channel_handle(channel_id,
-        base::FileDescriptor(channel_->TakeClientFileDescriptor(), true));
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
-        base::Bind(
-            &XWalkExtensionProcessHost::Delegate::OnExtensionProcessCreated,
-            base::Unretained(delegate_), render_process_host_->GetID(),
-            channel_handle));
-#else
-    NOTIMPLEMENTED();
-#endif  // #if defined(OS_LINUX)
-#else
-    process_.reset(content::BrowserChildProcessHost::Create(
-        content::PROCESS_TYPE_CONTENT_END, this));
+  process_.reset(content::BrowserChildProcessHost::Create(
+      content::PROCESS_TYPE_CONTENT_END, this));
 
-    std::string channel_id = process_->GetHost()->CreateChannel();
-    CHECK(!channel_id.empty());
+  std::string channel_id = process_->GetHost()->CreateChannel();
+  CHECK(!channel_id.empty());
 
-    CommandLine::StringType extension_cmd_prefix;
+  base::CommandLine::StringType extension_cmd_prefix;
 #if defined(OS_POSIX)
-    const CommandLine &browser_command_line = *CommandLine::ForCurrentProcess();
-    extension_cmd_prefix = browser_command_line.GetSwitchValueNative(
-        switches::kXWalkExtensionCmdPrefix);
+  const base::CommandLine &browser_command_line =
+      *base::CommandLine::ForCurrentProcess();
+  extension_cmd_prefix = browser_command_line.GetSwitchValueNative(
+      switches::kXWalkExtensionCmdPrefix);
 #endif
 
 #if defined(OS_LINUX)
-    int flags = extension_cmd_prefix.empty() ?
-        content::ChildProcessHost::CHILD_ALLOW_SELF :
-        content::ChildProcessHost::CHILD_NORMAL;
+  int flags = extension_cmd_prefix.empty() ?
+      content::ChildProcessHost::CHILD_ALLOW_SELF :
+      content::ChildProcessHost::CHILD_NORMAL;
 #else
-    int flags = content::ChildProcessHost::CHILD_NORMAL;
+  int flags = content::ChildProcessHost::CHILD_NORMAL;
 #endif
 
-    base::FilePath exe_path = content::ChildProcessHost::GetChildPath(flags);
-    if (exe_path.empty())
-      return;
+  base::FilePath exe_path = content::ChildProcessHost::GetChildPath(flags);
+  if (exe_path.empty())
+    return;
 
-    scoped_ptr<CommandLine> cmd_line(new CommandLine(exe_path));
-    cmd_line->AppendSwitchASCII(switches::kProcessType,
+  scoped_ptr<base::CommandLine> cmd_line(new base::CommandLine(exe_path));
+  cmd_line->AppendSwitchASCII(switches::kProcessType,
                                 switches::kXWalkExtensionProcess);
-    cmd_line->AppendSwitchASCII(switches::kProcessChannelID, channel_id);
-    if (!extension_cmd_prefix.empty())
-      cmd_line->PrependWrapper(extension_cmd_prefix);
+  cmd_line->AppendSwitchASCII(switches::kProcessChannelID, channel_id);
+  if (!extension_cmd_prefix.empty())
+    cmd_line->PrependWrapper(extension_cmd_prefix);
 
-    process_->Launch(
-        new ExtensionSandboxedProcessLauncherDelegate(process_->GetHost()),
-        cmd_line.release());
-#endif  // #if defined(SHARED_PROCESS_MODE)
+  process_->Launch(
+      new ExtensionSandboxedProcessLauncherDelegate(process_->GetHost()),
+      cmd_line.release(), true);
 
   base::ListValue runtime_variables_lv;
   ToListValue(&const_cast<base::ValueMap&>(*runtime_variables_),

@@ -16,6 +16,7 @@
 #include "content/public/browser/devtools_http_handler_delegate.h"
 #include "content/public/browser/devtools_manager_delegate.h"
 #include "url/gurl.h"
+#include "xwalk/runtime/browser/runtime.h"
 
 namespace content {
 class DevToolsHttpHandler;
@@ -23,51 +24,53 @@ class DevToolsHttpHandler;
 
 namespace xwalk {
 
-class RuntimeContext;
+class XWalkBrowserContext;
 
 class XWalkDevToolsHttpHandlerDelegate :
     public content::DevToolsHttpHandlerDelegate {
  public:
   XWalkDevToolsHttpHandlerDelegate();
-  virtual ~XWalkDevToolsHttpHandlerDelegate();
+  ~XWalkDevToolsHttpHandlerDelegate() override;
 
   // DevToolsHttpHandlerDelegate implementation.
-  virtual std::string GetDiscoveryPageHTML() OVERRIDE;
-  virtual bool BundlesFrontendResources() OVERRIDE;
-  virtual base::FilePath GetDebugFrontendDir() OVERRIDE;
-  virtual scoped_ptr<net::StreamListenSocket> CreateSocketForTethering(
-      net::StreamListenSocket::Delegate* delegate,
-      std::string* name) OVERRIDE;
+  std::string GetDiscoveryPageHTML() override;
+  bool BundlesFrontendResources() override;
+  base::FilePath GetDebugFrontendDir() override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(XWalkDevToolsHttpHandlerDelegate);
 };
 
-class XWalkDevToolsDelegate : public content::DevToolsManagerDelegate {
+class XWalkDevToolsDelegate : public content::DevToolsManagerDelegate,
+                              public Runtime::Observer {
  public:
-  explicit XWalkDevToolsDelegate(RuntimeContext* runtime_context);
-  virtual ~XWalkDevToolsDelegate();
+  explicit XWalkDevToolsDelegate(XWalkBrowserContext* browser_context);
+  ~XWalkDevToolsDelegate() override;
 
-  virtual void Inspect(
+  void Inspect(
       content::BrowserContext* browser_context,
-      content::DevToolsAgentHost* agent_host) OVERRIDE {}
-  virtual void DevToolsAgentStateChanged(
+      content::DevToolsAgentHost* agent_host) override {}
+  void DevToolsAgentStateChanged(
       content::DevToolsAgentHost* agent_host,
-      bool attached) OVERRIDE {}
-  virtual base::DictionaryValue* HandleCommand(
+      bool attached) override {}
+  base::DictionaryValue* HandleCommand(
       content::DevToolsAgentHost* agent_host,
-      base::DictionaryValue* command_dict) OVERRIDE;
-  virtual scoped_ptr<content::DevToolsTarget> CreateNewTarget(
-      const GURL& url) OVERRIDE;
-  virtual void EnumerateTargets(TargetCallback callback) OVERRIDE;
-  virtual std::string GetPageThumbnailData(const GURL& url) OVERRIDE;
+      base::DictionaryValue* command_dict) override;
+  scoped_ptr<content::DevToolsTarget> CreateNewTarget(
+      const GURL& url) override;
+  void EnumerateTargets(TargetCallback callback) override;
+  std::string GetPageThumbnailData(const GURL& url) override;
   void ProcessAndSaveThumbnail(const GURL& url,
                                scoped_refptr<base::RefCountedBytes> png);
 
  private:
+  // Runtime::Observer
+  void OnNewRuntimeAdded(Runtime* runtime) override;
+  void OnRuntimeClosed(Runtime* runtime) override;
+
   using ThumbnailMap = std::map<GURL, std::string>;
   ThumbnailMap thumbnail_map_;
-  RuntimeContext* runtime_context_;
+  XWalkBrowserContext* browser_context_;
   base::WeakPtrFactory<XWalkDevToolsDelegate> weak_factory_;
   DISALLOW_COPY_AND_ASSIGN(XWalkDevToolsDelegate);
 };

@@ -18,15 +18,15 @@ class XWalkRunnerAndroid : public XWalkRunner {
   // to change and harder to reason about.
   static XWalkRunnerAndroid* GetInstance();
 
-  virtual ~XWalkRunnerAndroid();
+  ~XWalkRunnerAndroid() override;
 
  private:
   friend class XWalkRunner;
   XWalkRunnerAndroid();
 
   // XWalkRunner implementation.
-  virtual scoped_ptr<ApplicationComponent> CreateAppComponent() OVERRIDE;
-  virtual scoped_ptr<SysAppsComponent> CreateSysAppsComponent() OVERRIDE;
+  scoped_ptr<ApplicationComponent> CreateAppComponent() override;
+  scoped_ptr<SysAppsComponent> CreateSysAppsComponent() override;
 };
 
 }  // namespace xwalk

@@ -20,8 +20,9 @@
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_descriptors.h"
 #include "content/public/common/main_function_params.h"
-#include "content/public/common/show_desktop_notification_params.h"
+#include "gin/public/isolate_holder.h"
 #include "net/ssl/ssl_info.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "ppapi/host/ppapi_host.h"
@@ -31,13 +32,17 @@
 #include "xwalk/runtime/browser/geolocation/xwalk_access_token_store.h"
 #include "xwalk/runtime/browser/media/media_capture_devices_dispatcher.h"
 #include "xwalk/runtime/browser/renderer_host/pepper/xwalk_browser_pepper_host_factory.h"
-#include "xwalk/runtime/browser/runtime_context.h"
+#include "xwalk/runtime/browser/runtime_platform_util.h"
 #include "xwalk/runtime/browser/runtime_quota_permission_context.h"
+#include "xwalk/runtime/browser/ssl_error_page.h"
 #include "xwalk/runtime/browser/speech/speech_recognition_manager_delegate.h"
+#include "xwalk/runtime/browser/xwalk_browser_context.h"
 #include "xwalk/runtime/browser/xwalk_browser_main_parts.h"
+#include "xwalk/runtime/browser/xwalk_platform_notification_service.h"
 #include "xwalk/runtime/browser/xwalk_render_message_filter.h"
 #include "xwalk/runtime/browser/xwalk_runner.h"
 #include "xwalk/runtime/common/xwalk_paths.h"
+#include "xwalk/runtime/common/xwalk_switches.h"
 
 #if !defined(DISABLE_NACL)
 #include "components/nacl/browser/nacl_browser.h"
@@ -47,6 +52,7 @@
 #endif
 
 #if defined(OS_ANDROID)
+#include "base/android/locale_utils.h"
 #include "base/android/path_utils.h"
 #include "base/base_paths_android.h"
 #include "xwalk/runtime/browser/android/xwalk_cookie_access_policy.h"
@@ -66,7 +72,7 @@
 
 #if defined(OS_TIZEN)
 #include "xwalk/application/common/application_manifest_constants.h"
-#include "xwalk/runtime/browser/runtime_platform_util.h"
+#include "xwalk/runtime/browser/geolocation/tizen/location_provider_tizen.h"
 #include "xwalk/runtime/browser/tizen/xwalk_web_contents_view_delegate.h"
 #include "xwalk/runtime/browser/xwalk_browser_main_parts_tizen.h"
 #endif
@@ -76,7 +82,7 @@ namespace xwalk {
 namespace {
 
 // The application-wide singleton of ContentBrowserClient impl.
-XWalkContentBrowserClient* g_browser_client = NULL;
+XWalkContentBrowserClient* g_browser_client = nullptr;
 
 }  // namespace
 
@@ -88,16 +94,20 @@ XWalkContentBrowserClient* XWalkContentBrowserClient::Get() {
 
 XWalkContentBrowserClient::XWalkContentBrowserClient(XWalkRunner* xwalk_runner)
     : xwalk_runner_(xwalk_runner),
-      url_request_context_getter_(NULL),
-      main_parts_(NULL),
-      runtime_context_(NULL) {
+      url_request_context_getter_(nullptr),
+#if defined(OS_POSIX) && !defined(OS_MACOSX)
+      v8_natives_fd_(-1),
+      v8_snapshot_fd_(-1),
+#endif  // OS_POSIX && !OS_MACOSX
+      main_parts_(nullptr),
+      browser_context_(xwalk_runner->browser_context()) {
   DCHECK(!g_browser_client);
   g_browser_client = this;
 }
 
 XWalkContentBrowserClient::~XWalkContentBrowserClient() {
   DCHECK(g_browser_client);
-  g_browser_client = NULL;
+  g_browser_client = nullptr;
 }
 
 content::BrowserMainParts* XWalkContentBrowserClient::CreateBrowserMainParts(
@@ -119,10 +129,8 @@ net::URLRequestContextGetter* XWalkContentBrowserClient::CreateRequestContext(
     content::BrowserContext* browser_context,
     content::ProtocolHandlerMap* protocol_handlers,
     content::URLRequestInterceptorScopedVector request_interceptors) {
-  runtime_context_ = static_cast<RuntimeContext*>(browser_context);
-  url_request_context_getter_ = runtime_context_->
+  return static_cast<XWalkBrowserContext*>(browser_context)->
       CreateRequestContext(protocol_handlers, request_interceptors.Pass());
-  return url_request_context_getter_;
 }
 
 net::URLRequestContextGetter*
@@ -132,7 +140,7 @@ XWalkContentBrowserClient::CreateRequestContextForStoragePartition(
     bool in_memory,
     content::ProtocolHandlerMap* protocol_handlers,
     content::URLRequestInterceptorScopedVector request_interceptors) {
-  return static_cast<RuntimeContext*>(browser_context)->
+  return static_cast<XWalkBrowserContext*>(browser_context)->
       CreateRequestContextForStoragePartition(
           partition_path, in_memory, protocol_handlers,
           request_interceptors.Pass());
@@ -141,17 +149,19 @@ XWalkContentBrowserClient::CreateRequestContextForStoragePartition(
 // This allow us to append extra command line switches to the child
 // process we launch.
 void XWalkContentBrowserClient::AppendExtraCommandLineSwitches(
-    CommandLine* command_line, int child_process_id) {
-  CommandLine* browser_process_cmd_line = CommandLine::ForCurrentProcess();
-  const int extra_switches_count = 1;
-  const char* extra_switches[extra_switches_count] = {
-    switches::kXWalkDisableExtensionProcess
+    base::CommandLine* command_line, int child_process_id) {
+  const base::CommandLine& browser_process_cmd_line =
+      *base::CommandLine::ForCurrentProcess();
+  const char* extra_switches[] = {
+    switches::kXWalkDisableExtensionProcess,
+#if defined(ENABLE_PLUGINS)
+    switches::kPpapiFlashPath,
+    switches::kPpapiFlashVersion
+#endif
   };
 
-  for (int i = 0; i < extra_switches_count; i++) {
-    if (browser_process_cmd_line->HasSwitch(extra_switches[i]))
-      command_line->AppendSwitch(extra_switches[i]);
-  }
+  command_line->CopySwitchesFrom(
+      browser_process_cmd_line, extra_switches, arraysize(extra_switches));
 }
 
 content::QuotaPermissionContext*
@@ -172,7 +182,7 @@ XWalkContentBrowserClient::GetWebContentsViewDelegate(
   return new XWalkWebContentsViewDelegate(
       web_contents, xwalk_runner_->app_system()->application_service());
 #else
-  return NULL;
+  return nullptr;
 #endif
 }
 
@@ -267,60 +277,26 @@ void XWalkContentBrowserClient::AllowCertificateError(
                                   &cancel_request);
   if (cancel_request)
     *result = content::CERTIFICATE_REQUEST_RESULT_TYPE_DENY;
-#endif
-}
-
-void XWalkContentBrowserClient::RequestDesktopNotificationPermission(
-    const GURL& source_origin,
-    content::RenderFrameHost* render_frame_host,
-    const base::Callback<void(blink::WebNotificationPermission)>& callback) {
-}
-
-blink::WebNotificationPermission
-XWalkContentBrowserClient::CheckDesktopNotificationPermission(
-    const GURL& source_url,
-    content::ResourceContext* context,
-    int render_process_id) {
-#if defined(OS_ANDROID)
-  return blink::WebNotificationPermissionAllowed;
 #else
-  return blink::WebNotificationPermissionDenied;
-#endif
-}
-
-void XWalkContentBrowserClient::ShowDesktopNotification(
-    const content::ShowDesktopNotificationHostMsgParams& params,
-    content::RenderFrameHost* render_frame_host,
-    scoped_ptr<content::DesktopNotificationDelegate> delegate,
-    base::Closure* cancel_callback) {
-#if defined(OS_ANDROID)
-  XWalkContentsClientBridgeBase* bridge =
-      XWalkContentsClientBridgeBase::FromRenderFrameHost(render_frame_host);
-  bridge->ShowNotification(params, render_frame_host,
-      delegate.Pass(), cancel_callback);
-#endif
-}
-
-void XWalkContentBrowserClient::RequestGeolocationPermission(
-    content::WebContents* web_contents,
-    int bridge_id,
-    const GURL& requesting_frame,
-    bool user_gesture,
-    base::Callback<void(bool)> result_callback,
-    base::Closure* cancel_callback) {
-#if defined(OS_ANDROID) || defined(OS_TIZEN)
-  if (!geolocation_permission_context_.get()) {
-    geolocation_permission_context_ =
-      new RuntimeGeolocationPermissionContext();
+  content::RenderFrameHost* render_frame_host =
+      content::RenderFrameHost::FromID(render_process_id, render_frame_id);
+  content::WebContents* web_contents =
+      content::WebContents::FromRenderFrameHost(render_frame_host);
+  if (!web_contents) {
+    NOTREACHED();
+    return;
   }
-  geolocation_permission_context_->RequestGeolocationPermission(
-    web_contents,
-    requesting_frame,
-    result_callback,
-    cancel_callback);
-#else
-  result_callback.Run(false);
+
+  // The interstitial page shown is responsible for destroying
+  // this instance of SSLErrorPage
+  (new SSLErrorPage(web_contents, cert_error,
+                    ssl_info, request_url, callback))->Show();
 #endif
+}
+
+content::PlatformNotificationService*
+XWalkContentBrowserClient::GetPlatformNotificationService() {
+  return XWalkPlatformNotificationService::GetInstance();
 }
 
 void XWalkContentBrowserClient::DidCreatePpapiPlugin(
@@ -348,18 +324,20 @@ content::BrowserPpapiHost*
     ++iter;
   }
 #endif
-  return NULL;
+  return nullptr;
 }
 
+#if defined(OS_ANDROID) || defined(OS_TIZEN)  || defined(OS_LINUX)
 void XWalkContentBrowserClient::ResourceDispatcherHostCreated() {
   resource_dispatcher_host_delegate_ =
       (RuntimeResourceDispatcherHostDelegate::Create()).Pass();
   content::ResourceDispatcherHost::Get()->SetDelegate(
       resource_dispatcher_host_delegate_.get());
 }
+#endif
 
 content::SpeechRecognitionManagerDelegate*
-    XWalkContentBrowserClient::GetSpeechRecognitionManagerDelegate() {
+    XWalkContentBrowserClient::CreateSpeechRecognitionManagerDelegate() {
   return new xwalk::XWalkSpeechRecognitionManagerDelegate();
 }
 
@@ -391,13 +369,19 @@ bool XWalkContentBrowserClient::CanCreateWindow(const GURL& opener_url,
   }
 
   LOG(INFO) << "[BlOCK] CreateWindow: " << target_url.spec();
-#if defined(OS_TIZEN)
   platform_util::OpenExternal(target_url);
-#endif
   return false;
 }
 #endif
 
+content::LocationProvider*
+XWalkContentBrowserClient::OverrideSystemLocationProvider() {
+#if defined(OS_TIZEN)
+  return new LocationProviderTizen();
+#else
+  return nullptr;
+#endif
+}
 
 void XWalkContentBrowserClient::GetStoragePartitionConfigForSite(
     content::BrowserContext* browser_context,
@@ -418,7 +402,44 @@ void XWalkContentBrowserClient::GetStoragePartitionConfigForSite(
 
 content::DevToolsManagerDelegate*
   XWalkContentBrowserClient::GetDevToolsManagerDelegate() {
-  return new XWalkDevToolsDelegate(runtime_context_);
+  return new XWalkDevToolsDelegate(browser_context_);
+}
+
+#if defined(OS_POSIX) && !defined(OS_MACOSX)
+void XWalkContentBrowserClient::GetAdditionalMappedFilesForChildProcess(
+    const base::CommandLine& command_line,
+    int child_process_id,
+    content::FileDescriptorInfo* mappings) {
+#if defined(V8_USE_EXTERNAL_STARTUP_DATA)
+  if (v8_snapshot_fd_.get() == -1 && v8_natives_fd_.get() == -1) {
+    base::FilePath v8_data_path;
+    PathService::Get(gin::IsolateHolder::kV8SnapshotBasePathKey, &v8_data_path);
+    DCHECK(!v8_data_path.empty());
+
+    int file_flags = base::File::FLAG_OPEN | base::File::FLAG_READ;
+    base::FilePath v8_natives_data_path =
+        v8_data_path.AppendASCII(gin::IsolateHolder::kNativesFileName);
+    base::FilePath v8_snapshot_data_path =
+        v8_data_path.AppendASCII(gin::IsolateHolder::kSnapshotFileName);
+    base::File v8_natives_data_file(v8_natives_data_path, file_flags);
+    base::File v8_snapshot_data_file(v8_snapshot_data_path, file_flags);
+    DCHECK(v8_natives_data_file.IsValid());
+    DCHECK(v8_snapshot_data_file.IsValid());
+    v8_natives_fd_.reset(v8_natives_data_file.TakePlatformFile());
+    v8_snapshot_fd_.reset(v8_snapshot_data_file.TakePlatformFile());
+  }
+  mappings->Share(kV8NativesDataDescriptor, v8_natives_fd_.get());
+  mappings->Share(kV8SnapshotDataDescriptor, v8_snapshot_fd_.get());
+#endif  // V8_USE_EXTERNAL_STARTUP_DATA
+}
+#endif  // defined(OS_POSIX) && !defined(OS_MACOSX)
+
+std::string XWalkContentBrowserClient::GetApplicationLocale() {
+#if defined(OS_ANDROID)
+  return base::android::GetDefaultLocale();
+#else
+  return content::ContentBrowserClient::GetApplicationLocale();
+#endif
 }
 
 }  // namespace xwalk

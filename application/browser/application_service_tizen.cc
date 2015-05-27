@@ -4,13 +4,14 @@
 
 #include "xwalk/application/browser/application_service_tizen.h"
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
 #include "xwalk/application/browser/application.h"
 #include "xwalk/application/common/id_util.h"
 #include "xwalk/application/common/tizen/application_storage.h"
-#include "xwalk/runtime/browser/runtime_context.h"
+#include "xwalk/runtime/browser/xwalk_browser_context.h"
 
 namespace xwalk {
 
@@ -22,11 +23,12 @@ const base::FilePath::CharType kApplicationDataDirName[] =
     FILE_PATH_LITERAL("Storage/ext");
 
 base::FilePath GetStoragePartitionPath(
-    const base::FilePath& base_path, const std::string& app_id) {
+    const base::FilePath& base_path, std::string app_id) {
+  std::transform(app_id.begin(), app_id.end(), app_id.begin(), ::tolower);
   return base_path.Append(kApplicationDataDirName).Append(app_id);
 }
 
-void CollectUnusedStoragePartitions(RuntimeContext* context,
+void CollectUnusedStoragePartitions(XWalkBrowserContext* context,
                                     ApplicationStorage* storage) {
   std::vector<std::string> app_ids;
   if (!storage->GetInstalledApplicationIDs(app_ids))
@@ -47,17 +49,17 @@ void CollectUnusedStoragePartitions(RuntimeContext* context,
 }  // namespace
 
 ApplicationServiceTizen::ApplicationServiceTizen(
-    RuntimeContext* runtime_context)
-  : ApplicationService(runtime_context),
-    application_storage_(new ApplicationStorage(runtime_context->GetPath())) {
-  CollectUnusedStoragePartitions(runtime_context, application_storage_.get());
+    XWalkBrowserContext* browser_context)
+  : ApplicationService(browser_context),
+    application_storage_(new ApplicationStorage(browser_context->GetPath())) {
+  CollectUnusedStoragePartitions(browser_context, application_storage_.get());
 }
 
 ApplicationServiceTizen::~ApplicationServiceTizen() {
 }
 
 Application* ApplicationServiceTizen::LaunchFromAppID(
-    const std::string& id, const Application::LaunchParams& params) {
+    const std::string& id, const std::string& encoded_bundle) {
   if (!IsValidApplicationID(id)) {
      LOG(ERROR) << "The input parameter is not a valid app id: " << id;
      return NULL;
@@ -70,7 +72,10 @@ Application* ApplicationServiceTizen::LaunchFromAppID(
     return NULL;
   }
 
-  return Launch(app_data, params);
+  // Set bundle data for app
+  app_data->set_bundle(encoded_bundle);
+
+  return Launch(app_data);
 }
 
 }  // namespace application

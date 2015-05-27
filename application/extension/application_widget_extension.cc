@@ -4,10 +4,15 @@
 
 #include "xwalk/application/extension/application_widget_extension.h"
 
+#include <vector>
+
 #include "base/bind.h"
 #include "base/path_service.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
@@ -20,18 +25,57 @@
 #include "xwalk/application/common/manifest_handlers/widget_handler.h"
 #include "xwalk/application/extension/application_widget_storage.h"
 #include "xwalk/runtime/browser/runtime.h"
-#include "xwalk/runtime/browser/runtime_context.h"
+#include "xwalk/runtime/browser/xwalk_browser_context.h"
 #include "xwalk/runtime/browser/xwalk_runner.h"
 #include "xwalk/runtime/common/xwalk_paths.h"
 
 using content::BrowserThread;
 
 namespace {
+
 const char kCommandKey[] = "cmd";
 const char kWidgetAttributeKey[] = "widgetKey";
 const char kPreferencesItemKey[] = "preferencesItemKey";
 const char kPreferencesItemValue[] = "preferencesItemValue";
+
+void DispatchStorageEvent(
+    base::DictionaryValue* msg,
+    content::WebContents* web_contents,
+    content::RenderFrameHost* frame) {
+  if (frame == web_contents->GetFocusedFrame())
+    return;
+
+  std::string key, oldValue, newValue;
+  msg->GetString("key", &key);
+  msg->GetString("oldValue", &oldValue);
+  msg->GetString("newValue", &newValue);
+
+  std::string code = base::StringPrintf(
+      "(function() {"
+      "  var old_value = '%s' == '' ? null : '%s';"
+      "  var new_value = '%s' == '' ? null : '%s';"
+      "  var event = {"
+      "    key: '%s',"
+      "    oldValue: old_value,"
+      "    newValue: new_value,"
+      "    url: window.location.href,"
+      "    storageArea: widget.preferences"
+      "  };"
+      "  for (var key in event) {"
+      "    Object.defineProperty(event, key, {"
+      "      value: event[key],"
+      "      writable: false"
+      "    });"
+      "  }"
+      "  for (var i = 0; i < window.eventListenerList.length; i++)"
+      "    window.eventListenerList[i](event);"
+      "})();", oldValue.c_str(), oldValue.c_str(),
+      newValue.c_str(), newValue.c_str(), key.c_str());
+
+  frame->ExecuteJavaScript(base::UTF8ToUTF16(code));
 }
+
+}  // namespace
 
 namespace xwalk {
 namespace application {
@@ -42,6 +86,11 @@ ApplicationWidgetExtension::ApplicationWidgetExtension(
     Application* application)
   : application_(application) {
   set_name("widget");
+
+  std::vector<std::string> entries;
+  entries.push_back("window.Widget");
+  set_entry_points(entries);
+
   set_javascript_api(ResourceBundle::GetSharedInstance().GetRawDataResource(
       IDR_XWALK_APPLICATION_WIDGET_API).as_string());
 }
@@ -52,14 +101,15 @@ XWalkExtensionInstance* ApplicationWidgetExtension::CreateInstance() {
 
 AppWidgetExtensionInstance::AppWidgetExtensionInstance(
     Application* application)
-  : application_(application),
-    handler_(this) {
+  : application_(application) {
   DCHECK(application_);
   base::ThreadRestrictions::SetIOAllowed(true);
 
   content::RenderProcessHost* rph =
       content::RenderProcessHost::FromID(application->GetRenderProcessHostID());
+  CHECK(rph);
   content::StoragePartition* partition = rph->GetStoragePartition();
+  CHECK(partition);
   base::FilePath path = partition->GetPath().Append(
       FILE_PATH_LITERAL("WidgetStorage"));
   widget_storage_.reset(new AppWidgetStorage(application_, path));
@@ -68,7 +118,6 @@ AppWidgetExtensionInstance::AppWidgetExtensionInstance(
 AppWidgetExtensionInstance::~AppWidgetExtensionInstance() {}
 
 void AppWidgetExtensionInstance::HandleMessage(scoped_ptr<base::Value> msg) {
-  handler_.HandleMessage(msg.Pass());
 }
 
 void AppWidgetExtensionInstance::HandleSyncMessage(
@@ -94,6 +143,8 @@ void AppWidgetExtensionInstance::HandleSyncMessage(
     result = ClearAllItems(msg.Pass());
   } else if (command == "GetAllItems") {
     result = GetAllItems(msg.Pass());
+  } else if (command == "GetItemValueByKey") {
+    result = GetItemValueByKey(msg.Pass());
   } else if (command == "KeyExists") {
     result = KeyExists(msg.Pass());
   } else {
@@ -140,8 +191,25 @@ AppWidgetExtensionInstance::SetPreferencesItem(scoped_ptr<base::Value> msg) {
     return result.Pass();
   }
 
-  if (widget_storage_->AddEntry(key, value, false))
+  std::string old_value;
+  if (!widget_storage_->GetValueByKey(key, &old_value)) {
+    old_value = "";
+  }
+  if (old_value == value) {
+    LOG(WARNING) << "You are trying to set the same value."
+                 << " Nothing will be done.";
     result.reset(new base::FundamentalValue(true));
+    return result.Pass();
+  }
+  if (widget_storage_->AddEntry(key, value, false)) {
+    result.reset(new base::FundamentalValue(true));
+
+    scoped_ptr<base::DictionaryValue> event(new base::DictionaryValue());
+    event->SetString("key", key);
+    event->SetString("oldValue", old_value);
+    event->SetString("newValue", value);
+    PostMessageToOtherFrames(event.Pass());
+  }
 
   return result.Pass();
 }
@@ -159,8 +227,23 @@ AppWidgetExtensionInstance::RemovePreferencesItem(scoped_ptr<base::Value> msg) {
     return result.Pass();
   }
 
-  if (widget_storage_->RemoveEntry(key))
+  std::string old_value;
+  if (!widget_storage_->GetValueByKey(key, &old_value)) {
+    LOG(WARNING) << "You are trying to remove an entry which doesn't exist."
+                 << " Nothing will be done.";
     result.reset(new base::FundamentalValue(true));
+    return result.Pass();
+  }
+
+  if (widget_storage_->RemoveEntry(key)) {
+    result.reset(new base::FundamentalValue(true));
+
+    scoped_ptr<base::DictionaryValue> event(new base::DictionaryValue());
+    event->SetString("key", key);
+    event->SetString("oldValue", old_value);
+    event->SetString("newValue", "");
+    PostMessageToOtherFrames(event.Pass());
+  }
 
   return result.Pass();
 }
@@ -170,9 +253,27 @@ scoped_ptr<base::FundamentalValue> AppWidgetExtensionInstance::ClearAllItems(
   scoped_ptr<base::FundamentalValue> result(
       new base::FundamentalValue(false));
 
-  if (widget_storage_->Clear())
-    result.reset(new base::FundamentalValue(true));
+  scoped_ptr<base::DictionaryValue> entries(new base::DictionaryValue());
+  widget_storage_->GetAllEntries(entries.get());
 
+  if (!widget_storage_->Clear())
+    return result.Pass();
+
+  for (base::DictionaryValue::Iterator it(*(entries.get()));
+      !it.IsAtEnd(); it.Advance()) {
+    std::string key = it.key();
+    if (!widget_storage_->EntryExists(key)) {
+      std::string old_value;
+      it.value().GetAsString(&old_value);
+      scoped_ptr<base::DictionaryValue> event(new base::DictionaryValue());
+      event->SetString("key", key);
+      event->SetString("oldValue", old_value);
+      event->SetString("newValue", "");
+      PostMessageToOtherFrames(event.Pass());
+    }
+  }
+
+  result.reset(new base::FundamentalValue(true));
   return result.Pass();
 }
 
@@ -181,6 +282,20 @@ scoped_ptr<base::DictionaryValue> AppWidgetExtensionInstance::GetAllItems(
   scoped_ptr<base::DictionaryValue> result(new base::DictionaryValue());
   widget_storage_->GetAllEntries(result.get());
 
+  return result.Pass();
+}
+
+scoped_ptr<base::StringValue> AppWidgetExtensionInstance::GetItemValueByKey(
+    scoped_ptr<base::Value> msg) {
+  base::DictionaryValue* dict;
+  msg->GetAsDictionary(&dict);
+
+  std::string key;
+  std::string value;
+  if (!dict->GetString(kPreferencesItemKey, &key) ||
+      !widget_storage_->GetValueByKey(key, &value))
+    value = "";
+  scoped_ptr<base::StringValue> result(new base::StringValue(value));
   return result.Pass();
 }
 
@@ -201,6 +316,18 @@ scoped_ptr<base::FundamentalValue> AppWidgetExtensionInstance::KeyExists(
     result.reset(new base::FundamentalValue(true));
 
   return result.Pass();
+}
+
+void AppWidgetExtensionInstance::PostMessageToOtherFrames(
+    scoped_ptr<base::DictionaryValue> msg) {
+  const std::vector<Runtime*>& runtime_set = application_->runtimes();
+  std::vector<Runtime*>::const_iterator it;
+  for (it = runtime_set.begin(); it != runtime_set.end(); ++it) {
+    content::WebContents* web_contents = (*it)->web_contents();
+    web_contents->ForEachFrame(base::Bind(&DispatchStorageEvent,
+                                          msg.get(),
+                                          web_contents));
+  }
 }
 
 }  // namespace application

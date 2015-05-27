@@ -16,11 +16,11 @@ class ApiTestRunner;
 class ApplicationBrowserTest: public InProcessBrowserTest {
  protected:
   ApplicationBrowserTest();
-  virtual ~ApplicationBrowserTest();
+  ~ApplicationBrowserTest() override;
 
-  virtual void SetUp() OVERRIDE;
+  void SetUp() override;
 
-  virtual void ProperMainThreadCleanup() OVERRIDE;
+  void ProperMainThreadCleanup() override;
 
   xwalk::application::ApplicationService* application_sevice() const;
 

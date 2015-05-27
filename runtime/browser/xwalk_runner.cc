@@ -16,10 +16,10 @@
 #include "xwalk/extensions/common/xwalk_extension_switches.h"
 #include "xwalk/runtime/browser/application_component.h"
 #include "xwalk/runtime/browser/devtools/remote_debugging_server.h"
-#include "xwalk/runtime/browser/runtime_context.h"
 #include "xwalk/runtime/browser/storage_component.h"
 #include "xwalk/runtime/browser/sysapps_component.h"
 #include "xwalk/runtime/browser/xwalk_app_extension_bridge.h"
+#include "xwalk/runtime/browser/xwalk_browser_context.h"
 #include "xwalk/runtime/browser/xwalk_browser_main_parts.h"
 #include "xwalk/runtime/browser/xwalk_component.h"
 #include "xwalk/runtime/browser/xwalk_content_browser_client.h"
@@ -40,13 +40,14 @@ XWalkRunner* g_xwalk_runner = NULL;
 
 }  // namespace
 
-XWalkRunner::XWalkRunner() {
+XWalkRunner::XWalkRunner()
+    : app_component_(nullptr) {
   VLOG(1) << "Creating XWalkRunner object.";
   DCHECK(!g_xwalk_runner);
   g_xwalk_runner = this;
 
   XWalkRuntimeFeatures::GetInstance()->Initialize(
-      CommandLine::ForCurrentProcess());
+      base::CommandLine::ForCurrentProcess());
 
   // Initializing after the g_xwalk_runner is set to ensure
   // XWalkRunner::GetInstance() can be used in all sub objects if needed.
@@ -69,10 +70,10 @@ application::ApplicationSystem* XWalkRunner::app_system() {
 }
 
 void XWalkRunner::PreMainMessageLoopRun() {
-  runtime_context_.reset(new RuntimeContext);
+  browser_context_.reset(new XWalkBrowserContext);
   app_extension_bridge_.reset(new XWalkAppExtensionBridge());
 
-  CommandLine* cmd_line = CommandLine::ForCurrentProcess();
+  base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
   if (!cmd_line->HasSwitch(switches::kXWalkDisableExtensions))
     extension_service_.reset(new extensions::XWalkExtensionService(
         app_extension_bridge_.get()));
@@ -84,7 +85,7 @@ void XWalkRunner::PreMainMessageLoopRun() {
 void XWalkRunner::PostMainMessageLoopRun() {
   DestroyComponents();
   extension_service_.reset();
-  runtime_context_.reset();
+  browser_context_.reset();
   DisableRemoteDebugging();
 }
 
@@ -93,12 +94,12 @@ void XWalkRunner::CreateComponents() {
   // Keep a reference as some code still needs to call
   // XWalkRunner::app_system().
   app_component_ = app_component.get();
-  AddComponent(app_component.PassAs<XWalkComponent>());
+  AddComponent(app_component.Pass());
 
   if (XWalkRuntimeFeatures::isSysAppsEnabled())
-    AddComponent(CreateSysAppsComponent().PassAs<XWalkComponent>());
+    AddComponent(CreateSysAppsComponent().Pass());
   if (XWalkRuntimeFeatures::isStorageAPIEnabled())
-    AddComponent(CreateStorageComponent().PassAs<XWalkComponent>());
+    AddComponent(CreateStorageComponent().Pass());
 }
 
 void XWalkRunner::DestroyComponents() {
@@ -115,7 +116,7 @@ void XWalkRunner::AddComponent(scoped_ptr<XWalkComponent> component) {
 }
 
 scoped_ptr<ApplicationComponent> XWalkRunner::CreateAppComponent() {
-  return make_scoped_ptr(new ApplicationComponent(runtime_context_.get()));
+  return make_scoped_ptr(new ApplicationComponent(browser_context_.get()));
 }
 
 scoped_ptr<SysAppsComponent> XWalkRunner::CreateSysAppsComponent() {
@@ -175,8 +176,11 @@ void XWalkRunner::OnRenderProcessHostGone(content::RenderProcessHost* host) {
 void XWalkRunner::EnableRemoteDebugging(int port) {
   const char* local_ip = "0.0.0.0";
   if (port > 0 && port < 65535) {
+    if (remote_debugging_server_.get() &&
+        remote_debugging_server_.get()->port() == port)
+      remote_debugging_server_.reset();
     remote_debugging_server_.reset(
-        new RemoteDebuggingServer(runtime_context(),
+        new RemoteDebuggingServer(browser_context(),
             local_ip, port, std::string()));
   }
 }

@@ -12,14 +12,14 @@ class XWalkAccessTokenStore : public content::AccessTokenStore {
   explicit XWalkAccessTokenStore(net::URLRequestContextGetter* request_context);
 
  private:
-  virtual ~XWalkAccessTokenStore();
+  ~XWalkAccessTokenStore() override;
 
   // AccessTokenStore
-  virtual void LoadAccessTokens(
-      const LoadAccessTokensCallbackType& callback) OVERRIDE;
+  void LoadAccessTokens(
+      const LoadAccessTokensCallbackType& callback) override;
 
-  virtual void SaveAccessToken(
-      const GURL& server_url, const base::string16& access_token) OVERRIDE;
+  void SaveAccessToken(
+      const GURL& server_url, const base::string16& access_token) override;
 
   static void DidLoadAccessTokens(
       net::URLRequestContextGetter* request_context,

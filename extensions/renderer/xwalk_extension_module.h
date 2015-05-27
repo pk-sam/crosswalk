@@ -35,7 +35,7 @@ class XWalkExtensionModule : public XWalkExtensionClient::InstanceHandler {
                        XWalkModuleSystem* module_system,
                        const std::string& extension_name,
                        const std::string& extension_code);
-  virtual ~XWalkExtensionModule();
+  ~XWalkExtensionModule() override;
 
   // TODO(cmarcelo): Make this return a v8::Handle<v8::Object>, and
   // let the module system set it to the appropriated object.
@@ -46,7 +46,7 @@ class XWalkExtensionModule : public XWalkExtensionClient::InstanceHandler {
 
  private:
   // XWalkExtensionClient::InstanceHandler implementation.
-  virtual void HandleMessageFromNative(const base::Value& msg) OVERRIDE;
+  void HandleMessageFromNative(const base::Value& msg) override;
 
   // Callbacks for JS functions available in 'extension' object.
   static void PostMessageCallback(

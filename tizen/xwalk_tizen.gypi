@@ -4,6 +4,7 @@
     'target_name': 'xwalk_tizen_lib',
     'type': 'static_library',
     'dependencies': [
+      '../../content/content.gyp:content_browser',
       '../../skia/skia.gyp:skia',
       '../build/system.gyp:tizen_sensor',
       '../build/system.gyp:tizen_vibration',
@@ -18,8 +19,10 @@
       'mobile/sensor/tizen_data_fetcher_shared_memory.h',
       'mobile/sensor/tizen_platform_sensor.cc',
       'mobile/sensor/tizen_platform_sensor.h',
-      'browser/vibration/vibration_provider_tizen.cc',
-      'browser/vibration/vibration_provider_tizen.h',
+
+      # Broken with Chromium M41: XWALK-3398.
+      # 'browser/vibration/vibration_provider_tizen.cc',
+      # 'browser/vibration/vibration_provider_tizen.h',
     ],
     'conditions': [
       [ 'tizen_mobile == 1', {

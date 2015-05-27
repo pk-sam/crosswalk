@@ -11,7 +11,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/file_util.h"
+#include "base/files/file_util.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
@@ -100,7 +100,7 @@ void ShowItemInFolderOnFileThread(const base::FilePath& full_path) {
       ShellExecute(NULL, L"open", dir.value().c_str(), NULL, NULL, SW_SHOW);
     } else {
       LPTSTR message = NULL;
-      DWORD message_length = FormatMessage(
+      FormatMessage(
           FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
           0, hr, 0, reinterpret_cast<LPTSTR>(&message), 0, NULL);
       LOG(WARNING) << " " << __FUNCTION__
@@ -118,7 +118,7 @@ void ShowItemInFolderOnFileThread(const base::FilePath& full_path) {
 // is empty. This function tells if it is.
 bool ValidateShellCommandForScheme(const std::string& scheme) {
   base::win::RegKey key;
-  std::wstring registry_path = base::ASCIIToWide(scheme) +
+  std::wstring registry_path = base::ASCIIToUTF16(scheme) +
                                L"\\shell\\open\\command";
   key.Open(HKEY_CLASSES_ROOT, registry_path.c_str(), KEY_READ);
   if (!key.Valid())
@@ -140,11 +140,20 @@ void ShowItemInFolder(const base::FilePath& full_path) {
       base::Bind(&ShowItemInFolderOnFileThread, full_path));
 }
 
-void OpenItem(const base::FilePath& full_path) {
+void OpenItem(const base::FilePath& full_path, OpenItemType item_type) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
-  BrowserThread::PostTask(
+  switch (item_type) {
+  case OPEN_FILE:
+    BrowserThread::PostTask(
       BrowserThread::FILE, FROM_HERE,
-      base::Bind(base::IgnoreResult(&ui::win::OpenItemViaShell), full_path));
+      base::Bind(base::IgnoreResult(&ui::win::OpenFileViaShell), full_path));
+    break;
+  case OPEN_FOLDER:
+    BrowserThread::PostTask(
+      BrowserThread::FILE, FROM_HERE,
+      base::Bind(base::IgnoreResult(&ui::win::OpenFolderViaShell), full_path));
+    break;
+  }
 }
 
 void OpenExternal(const GURL& url) {

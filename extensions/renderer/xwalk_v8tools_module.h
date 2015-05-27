@@ -15,10 +15,10 @@ namespace extensions {
 class XWalkV8ToolsModule : public XWalkNativeModule {
  public:
   XWalkV8ToolsModule();
-  virtual ~XWalkV8ToolsModule();
+  ~XWalkV8ToolsModule() override;
 
  private:
-  virtual v8::Handle<v8::Object> NewInstance() OVERRIDE;
+  v8::Handle<v8::Object> NewInstance() override;
 
   v8::Persistent<v8::ObjectTemplate> object_template_;
 };

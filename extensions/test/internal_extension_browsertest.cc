@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include "base/logging.h"
+#include "base/numerics/safe_conversions.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "grit/xwalk_extensions_resources.h"
@@ -17,6 +18,7 @@
 
 using namespace xwalk::extensions; // NOLINT
 using namespace xwalk::jsapi::test; // NOLINT
+using xwalk::Runtime;
 
 TestExtension::TestExtension() {
   set_name("test");
@@ -102,10 +104,10 @@ void TestExtensionInstance::OnGetAllPersons(
     return;
   }
 
-  unsigned max_size = std::min<unsigned>(database()->size(), params->max_size);
+  size_t max_size = std::min<size_t>(database()->size(), params->max_size);
   std::vector<linked_ptr<Person> > persons;
 
-  for (unsigned i = 0; i < max_size; ++i) {
+  for (size_t i = 0; i < max_size; ++i) {
     linked_ptr<Person> person(new Person);
     person->name = database()->at(i).first;
     person->age = database()->at(i).second;
@@ -113,7 +115,8 @@ void TestExtensionInstance::OnGetAllPersons(
     persons.push_back(person);
   }
 
-  info->PostResult(GetAllPersons::Results::Create(persons, max_size));
+  info->PostResult(
+    GetAllPersons::Results::Create(persons, base::checked_cast<int>(max_size)));
 }
 
 void TestExtensionInstance::OnGetPersonAge(
@@ -155,21 +158,20 @@ void TestExtensionInstance::DispatchHeartbeat() {
 
 class InternalExtensionTest : public XWalkExtensionsTestBase {
  public:
-  virtual void CreateExtensionsForUIThread(
-      XWalkExtensionVector* extensions) OVERRIDE {
+  void CreateExtensionsForUIThread(
+      XWalkExtensionVector* extensions) override {
     extensions->push_back(new TestExtension);
   }
 };
 
 IN_PROC_BROWSER_TEST_F(InternalExtensionTest, InternalExtension) {
-  content::RunAllPendingInMessageLoop();
-
-  content::TitleWatcher title_watcher(runtime()->web_contents(), kPassString);
+  Runtime* runtime = CreateRuntime();
+  content::TitleWatcher title_watcher(runtime->web_contents(), kPassString);
   title_watcher.AlsoWaitForTitle(kFailString);
 
   GURL url = GetExtensionsTestURL(base::FilePath(),
       base::FilePath().AppendASCII("test_internal_extension.html"));
-  xwalk_test_utils::NavigateToURL(runtime(), url);
+  xwalk_test_utils::NavigateToURL(runtime, url);
 
   EXPECT_EQ(kPassString, title_watcher.WaitAndGetTitle());
 }

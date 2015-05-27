@@ -28,15 +28,15 @@ class RuntimeResourceDispatcherHostDelegateAndroid
     : public RuntimeResourceDispatcherHostDelegate {
  public:
   RuntimeResourceDispatcherHostDelegateAndroid();
-  virtual ~RuntimeResourceDispatcherHostDelegateAndroid();
+  ~RuntimeResourceDispatcherHostDelegateAndroid() override;
 
-  virtual void RequestBeginning(
+  void RequestBeginning(
       net::URLRequest* request,
       content::ResourceContext* resource_context,
       content::AppCacheService* appcache_service,
       content::ResourceType resource_type,
-      ScopedVector<content::ResourceThrottle>* throttles) OVERRIDE;
-  virtual void DownloadStarting(
+      ScopedVector<content::ResourceThrottle>* throttles) override;
+  void DownloadStarting(
       net::URLRequest* request,
       content::ResourceContext* resource_context,
       int child_id,
@@ -44,19 +44,19 @@ class RuntimeResourceDispatcherHostDelegateAndroid
       int request_id,
       bool is_content_initiated,
       bool must_download,
-      ScopedVector<content::ResourceThrottle>* throttles) OVERRIDE;
-  virtual content::ResourceDispatcherHostLoginDelegate* CreateLoginDelegate(
+      ScopedVector<content::ResourceThrottle>* throttles) override;
+  content::ResourceDispatcherHostLoginDelegate* CreateLoginDelegate(
       net::AuthChallengeInfo* auth_info,
-      net::URLRequest* request) OVERRIDE;
-  virtual bool HandleExternalProtocol(
+      net::URLRequest* request) override;
+  bool HandleExternalProtocol(
       const GURL& url,
       int child_id,
-      int route_id) OVERRIDE;
-  virtual void OnResponseStarted(
+      int route_id) override;
+  void OnResponseStarted(
       net::URLRequest* request,
       content::ResourceContext* resource_context,
       content::ResourceResponse* response,
-      IPC::Sender* sender) OVERRIDE;
+      IPC::Sender* sender) override;
 
   void RemovePendingThrottleOnIoThread(IoThreadClientThrottle* throttle);
 

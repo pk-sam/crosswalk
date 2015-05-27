@@ -17,7 +17,7 @@
 #include <map>
 #include <string>
 
-#include "base/file_util.h"
+#include "base/files/file_util.h"
 #include "base/files/file_enumerator.h"
 #include "base/logging.h"
 #include "base/path_service.h"
@@ -28,13 +28,16 @@
 #include "xwalk/application/common/application_file_util.h"
 #include "xwalk/application/common/application_manifest_constants.h"
 #include "xwalk/application/common/id_util.h"
+#include "xwalk/application/common/manifest_handlers/tizen_app_control_handler.h"
 #include "xwalk/application/common/manifest_handlers/tizen_application_handler.h"
 #include "xwalk/application/common/manifest_handlers/tizen_metadata_handler.h"
 #include "xwalk/application/common/manifest_handlers/tizen_setting_handler.h"
 #include "xwalk/application/common/permission_policy_manager.h"
+#include "xwalk/application/common/tizen/app_control_info.h"
 #include "xwalk/application/common/tizen/application_storage.h"
 #include "xwalk/application/common/tizen/encryption.h"
 #include "xwalk/application/common/tizen/package_query.h"
+#include "xwalk/application/common/package/wgt_package.h"
 #include "xwalk/application/tools/tizen/xwalk_packageinfo_constants.h"
 #include "xwalk/application/tools/tizen/xwalk_platform_installer.h"
 #include "xwalk/application/tools/tizen/xwalk_rds_delta_parser.h"
@@ -61,12 +64,18 @@ const base::FilePath::CharType kUpdateTempDir[] =
 
 namespace widget_keys = xwalk::application_widget_keys;
 
-const base::FilePath kXWalkLauncherBinary("/usr/bin/xwalk-launcher");
+inline base::FilePath GetXWalkBinaryPath() {
+#if defined(__x86_64__)
+  return base::FilePath("/usr/lib64/xwalk/xwalk");
+#else
+  return base::FilePath("/usr/lib/xwalk/xwalk");
+#endif
+}
 
 const base::FilePath kDefaultIcon(
     "/usr/share/icons/default/small/crosswalk.png");
 
-const std::string kServicePrefix("xwalk-service.");
+const std::string kServicePrefix("xwalk.");
 const std::string kAppIdPrefix("xwalk.");
 
 bool CopyDirectoryContents(const base::FilePath& from,
@@ -135,6 +144,35 @@ bool GeneratePkgInfoXml(xwalk::application::ApplicationData* application,
   xml_writer.AddAttribute("exec", execute_path.MaybeAsASCII());
   xml_writer.AddAttribute("type", "webapp");
   xml_writer.AddAttribute("taskmanage", "true");
+
+  const xwalk::application::AppControlInfoList* aplist =
+      static_cast<const xwalk::application::AppControlInfoList*>(
+          application->GetManifestData(
+              widget_keys::kTizenApplicationAppControlsKey));
+  if (aplist) {
+    for (const auto& item : aplist->controls) {
+      xml_writer.StartElement("app-control");
+
+      xml_writer.StartElement("operation");
+      xml_writer.AddAttribute("name", item.operation());
+      xml_writer.EndElement();
+
+      if (!item.uri().empty()) {
+        xml_writer.StartElement("uri");
+        xml_writer.AddAttribute("name", item.uri());
+        xml_writer.EndElement();
+      }
+
+      if (!item.mime().empty()) {
+        xml_writer.StartElement("mime");
+        xml_writer.AddAttribute("name", item.mime());
+        xml_writer.EndElement();
+      }
+
+      xml_writer.EndElement();
+    }
+  }
+
   xml_writer.WriteElement("label", application->Name());
 
   xwalk::application::TizenMetaDataInfo* info =
@@ -174,12 +212,22 @@ bool CreateAppSymbolicLink(const base::FilePath& app_dir,
     return false;
   }
 
-  if (!base::CreateSymbolicLink(kXWalkLauncherBinary, execute_path)) {
+  if (!base::CreateSymbolicLink(GetXWalkBinaryPath(), execute_path)) {
     LOG(ERROR) << "Could not create symbolic link to launcher from '"
                << execute_path.value() << "'.";
     return false;
   }
   return true;
+}
+
+bool ContainsWidgetStartFile(const base::FilePath& path) {
+  for (std::string fname :
+      xwalk::application::WGTPackage::GetDefaultWidgetEntryPages()) {
+    if (base::PathExists(path.AppendASCII(fname.c_str())))
+      return true;
+  }
+  LOG(ERROR) << "Default start widget file does not exist.";
+  return false;
 }
 
 }  // namespace
@@ -327,8 +375,14 @@ bool PackageInstaller::PlatformReinstall(const std::string& pkgid) {
 bool PackageInstaller::Install(const base::FilePath& path, std::string* id) {
   // FIXME(leandro): Installation is not robust enough -- should any step
   // fail, it can't roll back to a consistent state.
-  if (!base::PathExists(path))
+  if (!base::PathExists(path)) {
+    LOG(ERROR) << "The specified XPK/WGT package file is invalid.";
     return false;
+  }
+  if (base::DirectoryExists(path)) {
+    LOG(WARNING) << "Cannot install from directory.";
+    return false;
+  }
 
   base::FilePath data_dir, install_temp_dir;
   CHECK(PathService::Get(xwalk::DIR_DATA_PATH, &data_dir));
@@ -361,6 +415,11 @@ bool PackageInstaller::Install(const base::FilePath& path, std::string* id) {
     app_id = package->Id();
   } else {
     unpacked_dir = path;
+  }
+
+  if (package->manifest_type() == Manifest::TYPE_WIDGET &&
+      !ContainsWidgetStartFile(unpacked_dir)) {
+    return false;
   }
 
   base::FilePath app_dir = data_dir.AppendASCII(app_id);
@@ -493,12 +552,12 @@ bool PackageInstaller::Update(const std::string& app_id,
   }
 
   if (!base::PathExists(path)) {
-    LOG(ERROR) << "The XPK/WGT package file " << path.value() << " is invalid.";
+    LOG(ERROR) << "The specified XPK/WGT package file is invalid.";
     return false;
   }
 
   if (base::DirectoryExists(path)) {
-    LOG(WARNING) << "Cannot update an unpacked XPK/WGT package.";
+    LOG(WARNING) << "Cannot update from directory.";
     return false;
   }
 
@@ -605,7 +664,7 @@ bool PackageInstaller::Uninstall(const std::string& id) {
   std::string app_id = PrepareUninstallationID(id);
 
   if (!xwalk::application::IsValidApplicationID(app_id)) {
-    LOG(ERROR) << "The given application id " << app_id << " is invalid.";
+    LOG(ERROR) << "The given application id '" << app_id << "' is invalid.";
     return false;
   }
 
@@ -633,8 +692,12 @@ bool PackageInstaller::Uninstall(const std::string& id) {
 }
 
 bool PackageInstaller::Reinstall(const std::string& pkgid) {
-  base::FilePath app_dir = xwalk::application::GetPackagePath(pkgid);
+  if (!xwalk::application::IsValidPkgID(pkgid)) {
+    LOG(ERROR) << "The given package id '" << pkgid << "' is invalid.";
+    return false;
+  }
 
+  base::FilePath app_dir = xwalk::application::GetPackagePath(pkgid);
   if (!base::DirectoryExists(app_dir)) {
     LOG(ERROR) << "Application directory " << app_dir.value()
                << " does not exist!";

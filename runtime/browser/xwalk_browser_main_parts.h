@@ -20,6 +20,12 @@ namespace content {
 class RenderProcessHost;
 }
 
+#if defined(USE_WEBUI_FILE_PICKER)
+namespace wm {
+class WMState;
+}
+#endif
+
 namespace xwalk {
 
 class XWalkRunner;
@@ -33,16 +39,16 @@ class XWalkBrowserMainParts : public content::BrowserMainParts {
   explicit XWalkBrowserMainParts(
       const content::MainFunctionParams& parameters);
 
-  virtual ~XWalkBrowserMainParts();
+  ~XWalkBrowserMainParts() override;
 
   // BrowserMainParts overrides.
-  virtual void PreEarlyInitialization() OVERRIDE;
-  virtual int PreCreateThreads() OVERRIDE;
-  virtual void PreMainMessageLoopStart() OVERRIDE;
-  virtual void PostMainMessageLoopStart() OVERRIDE;
-  virtual void PreMainMessageLoopRun() OVERRIDE;
-  virtual bool MainMessageLoopRun(int* result_code) OVERRIDE;
-  virtual void PostMainMessageLoopRun() OVERRIDE;
+  void PreEarlyInitialization() override;
+  int PreCreateThreads() override;
+  void PreMainMessageLoopStart() override;
+  void PostMainMessageLoopStart() override;
+  void PreMainMessageLoopRun() override;
+  bool MainMessageLoopRun(int* result_code) override;
+  void PostMainMessageLoopRun() override;
 
   // Create all the extensions to be hooked into a new
   // RenderProcessHost. Base class implementation should be called by
@@ -71,6 +77,9 @@ class XWalkBrowserMainParts : public content::BrowserMainParts {
   bool run_default_message_loop_;
 
  private:
+#if defined(USE_WEBUI_FILE_PICKER)
+  scoped_ptr<wm::WMState> wm_state_;
+#endif
   DISALLOW_COPY_AND_ASSIGN(XWalkBrowserMainParts);
 };
 

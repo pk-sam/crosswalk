@@ -11,7 +11,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/favicon_url.h"
 #include "third_party/skia/include/core/SkBitmap.h"
-#include "ui/gfx/size.h"
+#include "ui/gfx/geometry/size.h"
 
 using content::BrowserThread;
 using content::WebContents;
@@ -31,7 +31,7 @@ void XWalkIconHelper::SetListener(Listener* listener) {
 }
 
 void XWalkIconHelper::DownloadIcon(const GURL& icon_url) {
-  web_contents()->DownloadImage(icon_url, true, 0,
+  web_contents()->DownloadImage(icon_url, true, 0, false,
       base::Bind(&XWalkIconHelper::DownloadFaviconCallback,
                  base::Unretained(this)));
 }

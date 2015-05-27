@@ -15,6 +15,7 @@
 #include "xwalk/test/base/xwalk_test_utils.h"
 
 using namespace xwalk::extensions;  // NOLINT
+using xwalk::Runtime;
 
 namespace {
 
@@ -31,12 +32,12 @@ class OnceExtensionInstance : public XWalkExtensionInstance {
       : answered_(false) {
   }
 
-  virtual ~OnceExtensionInstance() {
+  ~OnceExtensionInstance() override {
     base::AutoLock lock(g_contexts_destroyed_lock);
     g_contexts_destroyed++;
   }
 
-  virtual void HandleMessage(scoped_ptr<base::Value> msg) OVERRIDE {
+  void HandleMessage(scoped_ptr<base::Value> msg) override {
     std::string answer;
     if (answered_) {
       answer = "Fail";
@@ -64,7 +65,7 @@ class OnceExtension : public XWalkExtension {
         "};");
   }
 
-  virtual XWalkExtensionInstance* CreateInstance() OVERRIDE {
+  XWalkExtensionInstance* CreateInstance() override {
     g_contexts_created++;
     return new OnceExtensionInstance();
   }
@@ -72,12 +73,12 @@ class OnceExtension : public XWalkExtension {
 
 class XWalkExtensionsContextDestructionTest : public XWalkExtensionsTestBase {
  public:
-  virtual void CreateExtensionsForUIThread(
-      XWalkExtensionVector* extensions) OVERRIDE {
+  void CreateExtensionsForUIThread(
+      XWalkExtensionVector* extensions) override {
     extensions->push_back(new OnceExtension);
   }
 
-  virtual void TearDown() OVERRIDE {
+  void TearDown() override {
     SPIN_FOR_1_SECOND_OR_UNTIL_TRUE(g_contexts_destroyed >= 2);
     ASSERT_EQ(g_contexts_destroyed, 2);
   }
@@ -85,21 +86,21 @@ class XWalkExtensionsContextDestructionTest : public XWalkExtensionsTestBase {
 
 IN_PROC_BROWSER_TEST_F(XWalkExtensionsContextDestructionTest,
                        ContextIsDestroyedWhenNavigating) {
-  content::RunAllPendingInMessageLoop();
+  Runtime* runtime = CreateRuntime();
   GURL url = GetExtensionsTestURL(base::FilePath(),
       base::FilePath().AppendASCII("context_destruction.html"));
 
   {
-    content::TitleWatcher title_watcher(runtime()->web_contents(), kFailString);
+    content::TitleWatcher title_watcher(runtime->web_contents(), kFailString);
     title_watcher.AlsoWaitForTitle(kPassString);
-    xwalk_test_utils::NavigateToURL(runtime(), url);
+    xwalk_test_utils::NavigateToURL(runtime, url);
     EXPECT_EQ(kPassString, title_watcher.WaitAndGetTitle());
   }
 
   {
-    content::TitleWatcher title_watcher(runtime()->web_contents(), kFailString);
+    content::TitleWatcher title_watcher(runtime->web_contents(), kFailString);
     title_watcher.AlsoWaitForTitle(kPassString);
-    xwalk_test_utils::NavigateToURL(runtime(), url);
+    xwalk_test_utils::NavigateToURL(runtime, url);
     EXPECT_EQ(kPassString, title_watcher.WaitAndGetTitle());
   }
 

@@ -10,10 +10,10 @@
 class XWalkTestSuite : public content::ContentTestSuiteBase {
  public:
   XWalkTestSuite(int argc, char** argv);
-  virtual ~XWalkTestSuite();
+  ~XWalkTestSuite() override;
 
  protected:
-  virtual void Initialize() OVERRIDE;
+  void Initialize() override;
 };
 
 #endif  // XWALK_TEST_BASE_XWALK_TEST_SUITE_H_

@@ -23,10 +23,10 @@ using extensions::XWalkExtensionInstance;
 class NativeFileSystemExtension : public XWalkExtension {
  public:
   explicit NativeFileSystemExtension(content::RenderProcessHost* host);
-  virtual ~NativeFileSystemExtension();
+  ~NativeFileSystemExtension() override;
 
   // XWalkExtension implementation.
-  virtual XWalkExtensionInstance* CreateInstance() OVERRIDE;
+  XWalkExtensionInstance* CreateInstance() override;
 
  private:
   content::RenderProcessHost* host_;
@@ -37,8 +37,8 @@ class NativeFileSystemInstance : public XWalkExtensionInstance {
   explicit NativeFileSystemInstance(content::RenderProcessHost* host);
 
   // XWalkExtensionInstance implementation.
-  virtual void HandleMessage(scoped_ptr<base::Value> msg) OVERRIDE;
-  virtual void HandleSyncMessage(scoped_ptr<base::Value> msg) OVERRIDE;
+  void HandleMessage(scoped_ptr<base::Value> msg) override;
+  void HandleSyncMessage(scoped_ptr<base::Value> msg) override;
 
  private:
   XWalkExtensionFunctionHandler handler_;

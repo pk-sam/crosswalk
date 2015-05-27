@@ -13,6 +13,10 @@
 
 namespace xwalk {
 
+namespace application {
+class Application;
+}
+
 // The class is the main interface for co-operations between the two major
 // xwalk components -- the application subsystem and the extension subsystem.
 // Because of the dependency requirements two components cound not include
@@ -24,27 +28,24 @@ class XWalkAppExtensionBridge
     : public extensions::XWalkExtensionService::Delegate {
  public:
   XWalkAppExtensionBridge();
-  virtual ~XWalkAppExtensionBridge();
+  ~XWalkAppExtensionBridge() override;
 
   void SetApplicationSystem(application::ApplicationSystem* app_system) {
     app_system_ = app_system;
   }
   // XWalkExtensionService::Delegate implementation
-  virtual void CheckAPIAccessControl(
+  void CheckAPIAccessControl(
       int render_process_id,
       const std::string& extension_name,
       const std::string& api_name,
-      const extensions::PermissionCallback& callback) OVERRIDE;
-  virtual bool RegisterPermissions(
+      const extensions::PermissionCallback& callback) override;
+  bool RegisterPermissions(
       int render_process_id,
       const std::string& extension_name,
-      const std::string& perm_table) OVERRIDE;
-  virtual void ExtensionProcessCreated(
-      int render_process_id,
-      const IPC::ChannelHandle& channel_handle) OVERRIDE;
-  virtual void RenderChannelCreated(int render_process_id) OVERRIDE;
+      const std::string& perm_table) override;
 
  private:
+  application::Application* GetApplication(int render_process_id);
   application::ApplicationSystem* app_system_;
 
   DISALLOW_COPY_AND_ASSIGN(XWalkAppExtensionBridge);

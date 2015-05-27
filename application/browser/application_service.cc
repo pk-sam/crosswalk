@@ -4,16 +4,7 @@
 
 #include "xwalk/application/browser/application_service.h"
 
-#if defined(OS_MACOSX)
-#include <ext/hash_set>
-#else
-#include <hash_set>
-#endif
-#include <set>
-#include <string>
-#include <vector>
-
-#include "base/file_util.h"
+#include "base/files/file_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
@@ -22,8 +13,9 @@
 #include "xwalk/application/common/application_manifest_constants.h"
 #include "xwalk/application/common/application_file_util.h"
 #include "xwalk/application/common/id_util.h"
-#include "xwalk/runtime/browser/runtime_context.h"
 #include "xwalk/runtime/browser/runtime.h"
+#include "xwalk/runtime/browser/xwalk_browser_context.h"
+#include "xwalk/runtime/browser/xwalk_runner.h"
 #include "xwalk/runtime/common/xwalk_paths.h"
 
 #if defined(OS_TIZEN)
@@ -34,17 +26,17 @@ namespace xwalk {
 
 namespace application {
 
-ApplicationService::ApplicationService(RuntimeContext* runtime_context)
-  : runtime_context_(runtime_context) {
+ApplicationService::ApplicationService(XWalkBrowserContext* browser_context)
+  : browser_context_(browser_context) {
 }
 
 scoped_ptr<ApplicationService> ApplicationService::Create(
-    RuntimeContext* runtime_context) {
+    XWalkBrowserContext* browser_context) {
 #if defined(OS_TIZEN)
   return make_scoped_ptr<ApplicationService>(
-    new ApplicationServiceTizen(runtime_context));
+    new ApplicationServiceTizen(browser_context));
 #else
-  return make_scoped_ptr(new ApplicationService(runtime_context));
+  return make_scoped_ptr(new ApplicationService(browser_context));
 #endif
 }
 
@@ -52,8 +44,7 @@ ApplicationService::~ApplicationService() {
 }
 
 Application* ApplicationService::Launch(
-    scoped_refptr<ApplicationData> application_data,
-    const Application::LaunchParams& launch_params) {
+    scoped_refptr<ApplicationData> application_data) {
   if (GetApplicationByID(application_data->ID()) != NULL) {
     LOG(INFO) << "Application with id: " << application_data->ID()
               << " is already running.";
@@ -63,11 +54,11 @@ Application* ApplicationService::Launch(
   }
 
   Application* application = Application::Create(application_data,
-    runtime_context_).release();
+    browser_context_).release();
   ScopedVector<Application>::iterator app_iter =
       applications_.insert(applications_.end(), application);
 
-  if (!application->Launch(launch_params)) {
+  if (!application->Launch()) {
     applications_.erase(app_iter);
     return NULL;
   }
@@ -81,8 +72,7 @@ Application* ApplicationService::Launch(
 }
 
 Application* ApplicationService::LaunchFromManifestPath(
-    const base::FilePath& path, Manifest::Type manifest_type,
-        const Application::LaunchParams& params) {
+    const base::FilePath& path, Manifest::Type manifest_type) {
   std::string error;
   scoped_ptr<Manifest> manifest = LoadManifest(path, manifest_type, &error);
   if (!manifest) {
@@ -102,11 +92,11 @@ Application* ApplicationService::LaunchFromManifestPath(
     return NULL;
   }
 
-  return Launch(application_data, params);
+  return Launch(application_data);
 }
 
 Application* ApplicationService::LaunchFromPackagePath(
-    const base::FilePath& path, const Application::LaunchParams& params) {
+    const base::FilePath& path) {
   scoped_ptr<Package> package = Package::Create(path);
   if (!package || !package->IsValid()) {
     LOG(ERROR) << "Failed to obtain valid package from "
@@ -132,9 +122,12 @@ Application* ApplicationService::LaunchFromPackagePath(
     return NULL;
   }
 
+  std::string app_id;
+  if (package->manifest_type() == Manifest::TYPE_MANIFEST)
+    app_id = package->Id();
   std::string error;
   scoped_refptr<ApplicationData> application_data = LoadApplication(
-      target_dir, std::string(), ApplicationData::TEMP_DIRECTORY,
+      target_dir, app_id, ApplicationData::TEMP_DIRECTORY,
       package->manifest_type(), &error);
   if (!application_data.get()) {
     LOG(ERROR) << "Error occurred while trying to load application: "
@@ -142,14 +135,13 @@ Application* ApplicationService::LaunchFromPackagePath(
     return NULL;
   }
 
-  return Launch(application_data, params);
+  return Launch(application_data);
 }
 
 // Launch an application created from arbitrary url.
 // FIXME: This application should have the same strict permissions
 // as common browser apps.
-Application* ApplicationService::LaunchHostedURL(
-    const GURL& url, const Application::LaunchParams& params) {
+Application* ApplicationService::LaunchHostedURL(const GURL& url) {
   const std::string& url_spec = url.spec();
   if (url_spec.empty()) {
       LOG(ERROR) << "Failed to launch application from the URL: " << url;
@@ -174,7 +166,7 @@ Application* ApplicationService::LaunchHostedURL(
         ApplicationData::EXTERNAL_URL, manifest.Pass(), &error);
   DCHECK(app_data.get());
 
-  return Launch(app_data, params);
+  return Launch(app_data);
 }
 
 namespace {
@@ -244,17 +236,15 @@ void ApplicationService::OnApplicationTerminated(
       // FIXME: So far we simply clean up all the app persistent data,
       // further we need to add an appropriate logic to handle it.
       content::BrowserContext::GarbageCollectStoragePartitions(
-          runtime_context_,
-          make_scoped_ptr(new base::hash_set<base::FilePath>()),
+          browser_context_,
+          make_scoped_ptr(new base::hash_set<base::FilePath>()), // NOLINT
           base::Bind(&base::DoNothing));
   }
 
-#if !defined(SHARED_PROCESS_MODE)
   if (applications_.empty()) {
     base::MessageLoop::current()->PostTask(
-            FROM_HERE, base::MessageLoop::QuitClosure());
+          FROM_HERE, base::MessageLoop::QuitClosure());
   }
-#endif
 }
 
 void ApplicationService::CheckAPIAccessControl(const std::string& app_id,

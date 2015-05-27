@@ -4,9 +4,11 @@
 
 #include "xwalk/sysapps/raw_socket/udp_socket_object.h"
 
-#include <string.h>
+#include <algorithm>
+#include <string>
 
 #include "base/logging.h"
+#include "base/numerics/safe_conversions.h"
 #include "net/base/net_errors.h"
 #include "xwalk/sysapps/raw_socket/udp_socket.h"
 
@@ -94,10 +96,18 @@ void UDPSocketObject::OnInit(scoped_ptr<XWalkExtensionFunctionInfo> info) {
       return;
     }
 
+    const net::IPEndPoint end_point(ip_number, params->options->local_port);
+
+    if (socket_->Open(end_point.GetFamily()) != net::OK) {
+      LOG(WARNING) << "Cannot open UDP socket";
+      setReadyState(READY_STATE_CLOSED);
+      DispatchEvent("error");
+      return;
+    }
+
     if (params->options->address_reuse)
       socket_->AllowAddressReuse();
 
-    net::IPEndPoint end_point(ip_number, params->options->local_port);
     if (socket_->Bind(end_point) != net::OK) {
       LOG(WARNING) << "Can't bind to " << end_point.ToString();
       setReadyState(READY_STATE_CLOSED);
@@ -206,7 +216,8 @@ void UDPSocketObject::OnRead(int status) {
       static_cast<char*>(read_buffer_->data()), status));
 
   UDPMessageEvent event;
-  event.data = std::string(read_buffer_->data(), status);
+  std::string buffer_data(read_buffer_->data(), status);
+  std::copy(buffer_data.begin(), buffer_data.end(), back_inserter(event.data));
   event.remote_port = from_.port();
   event.remote_address = from_.ToStringWithoutPort();
 
@@ -243,9 +254,11 @@ void UDPSocketObject::OnSend(int status) {
   }
 
   if (!socket_->is_connected()) {
-    // If we are waiting for reads and the socket is not connect,
+    // If we are waiting for reads and the socket is not connected,
     // it means the connection was closed.
-    if (is_reading_ || socket_->Connect(addresses_[0]) != net::OK) {
+    if (is_reading_ ||
+        socket_->Open(addresses_[0].GetFamily()) != net::OK ||
+        socket_->Connect(addresses_[0]) != net::OK) {
       setReadyState(READY_STATE_CLOSED);
       DispatchEvent("error");
       return;
@@ -254,7 +267,7 @@ void UDPSocketObject::OnSend(int status) {
 
   int ret = socket_->SendTo(
       write_buffer_.get(),
-      write_buffer_size_,
+      base::checked_cast<int>(write_buffer_size_),
       addresses_[0],
       base::Bind(&UDPSocketObject::OnWrite, base::Unretained(this)));
 

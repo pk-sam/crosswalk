@@ -26,6 +26,7 @@
 #include "xwalk/runtime/browser/android/xwalk_download_resource_throttle.h"
 #include "xwalk/runtime/browser/android/xwalk_login_delegate.h"
 #include "xwalk/runtime/browser/xwalk_content_browser_client.h"
+#include "xwalk/runtime/common/xwalk_content_client.h"
 
 using content::BrowserThread;
 using navigation_interception::InterceptNavigationDelegate;
@@ -58,12 +59,13 @@ class IoThreadClientThrottle : public content::ResourceThrottle {
   IoThreadClientThrottle(int render_process_id,
                          int render_frame_id,
                          net::URLRequest* request);
-  virtual ~IoThreadClientThrottle();
+  ~IoThreadClientThrottle() override;
 
   // From content::ResourceThrottle
-  virtual void WillStartRequest(bool* defer) OVERRIDE;
-  virtual void WillRedirectRequest(const GURL& new_url, bool* defer) OVERRIDE;
-  virtual const char* GetNameForLogging() const OVERRIDE;
+  void WillStartRequest(bool* defer) override;
+  void WillRedirectRequest(const net::RedirectInfo& redirect_info,
+                           bool* defer) override;
+  const char* GetNameForLogging() const override;
 
   bool MaybeDeferRequest(bool* defer);
   void OnIoThreadClientReady(int new_render_process_id,
@@ -105,8 +107,9 @@ void IoThreadClientThrottle::WillStartRequest(bool* defer) {
   }
 }
 
-void IoThreadClientThrottle::WillRedirectRequest(const GURL& new_url,
-                                                 bool* defer) {
+void IoThreadClientThrottle::WillRedirectRequest(
+    const net::RedirectInfo& redirect_info,
+    bool* defer) {
   WillStartRequest(defer);
 }
 
@@ -248,9 +251,9 @@ void RuntimeResourceDispatcherHostDelegateAndroid::DownloadStarting(
   std::string mime_type;
   int64 content_length = request->GetExpectedContentSize();
 
-  request->extra_request_headers().GetHeader(
-      net::HttpRequestHeaders::kUserAgent, &user_agent);
-
+  if (!request->extra_request_headers().GetHeader(
+      net::HttpRequestHeaders::kUserAgent, &user_agent))
+    user_agent = xwalk::GetUserAgent();
 
   net::HttpResponseHeaders* response_headers = request->response_headers();
   if (response_headers) {

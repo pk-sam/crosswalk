@@ -14,7 +14,7 @@
 #include "xwalk/runtime/browser/android/net/android_protocol_handler.h"
 #include "xwalk/runtime/browser/android/net/android_stream_reader_url_request_job.h"
 #include "xwalk/runtime/browser/android/net/input_stream_impl.h"
-#include "xwalk/runtime/browser/runtime_context.h"
+#include "xwalk/runtime/browser/xwalk_browser_context.h"
 #include "xwalk/runtime/browser/xwalk_runner.h"
 
 using base::android::ScopedJavaLocalRef;
@@ -32,33 +32,33 @@ class StreamReaderJobDelegateImpl
       DCHECK(intercepted_request_data_impl_);
     }
 
-    virtual scoped_ptr<InputStream> OpenInputStream(
+    scoped_ptr<InputStream> OpenInputStream(
         JNIEnv* env,
-        const GURL& url) OVERRIDE {
+        const GURL& url) override {
       return intercepted_request_data_impl_->GetInputStream(env).Pass();
     }
 
-    virtual void OnInputStreamOpenFailed(net::URLRequest* request,
-                                         bool* restart) OVERRIDE {
+    void OnInputStreamOpenFailed(net::URLRequest* request,
+                                 bool* restart) override {
       *restart = false;
     }
 
-    virtual bool GetMimeType(JNIEnv* env,
-                             net::URLRequest* request,
-                             xwalk::InputStream* stream,
-                             std::string* mime_type) OVERRIDE {
+    bool GetMimeType(JNIEnv* env,
+                     net::URLRequest* request,
+                     xwalk::InputStream* stream,
+                     std::string* mime_type) override {
       return intercepted_request_data_impl_->GetMimeType(env, mime_type);
     }
 
-    virtual bool GetCharset(JNIEnv* env,
-                            net::URLRequest* request,
-                            xwalk::InputStream* stream,
-                            std::string* charset) OVERRIDE {
+    bool GetCharset(JNIEnv* env,
+                    net::URLRequest* request,
+                    xwalk::InputStream* stream,
+                    std::string* charset) override {
       return intercepted_request_data_impl_->GetCharset(env, charset);
     }
 
-    virtual bool GetPackageName(JNIEnv* env,
-                                std::string* name) OVERRIDE {
+    bool GetPackageName(JNIEnv* env,
+                        std::string* name) override {
       return intercepted_request_data_impl_->GetPackageName(env, name);
     }
 
@@ -121,9 +121,9 @@ net::URLRequestJob* InterceptedRequestDataImpl::CreateJobFor(
   scoped_ptr<AndroidStreamReaderURLRequestJob::Delegate>
       stream_reader_job_delegate_impl(new StreamReaderJobDelegateImpl(this));
 
-  RuntimeContext* runtime_context =
-      XWalkRunner::GetInstance()->runtime_context();
-  std::string content_security_policy = runtime_context->GetCSPString();
+  XWalkBrowserContext* browser_context =
+      XWalkRunner::GetInstance()->browser_context();
+  std::string content_security_policy = browser_context->GetCSPString();
 
   return new AndroidStreamReaderURLRequestJob(
       request, network_delegate, stream_reader_job_delegate_impl.Pass(),

@@ -19,11 +19,11 @@ class WebContents;
 class RuntimeSelectFilePolicy : public ui::SelectFilePolicy {
  public:
   RuntimeSelectFilePolicy();
-  virtual ~RuntimeSelectFilePolicy();
+  ~RuntimeSelectFilePolicy() override;
 
   // Overridden from ui::SelectFilePolicy:
-  virtual bool CanOpenSelectFileDialog() OVERRIDE;
-  virtual void SelectFileDenied() OVERRIDE;
+  bool CanOpenSelectFileDialog() override;
+  void SelectFileDenied() override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(RuntimeSelectFilePolicy);

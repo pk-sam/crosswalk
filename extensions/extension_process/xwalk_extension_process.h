@@ -43,15 +43,15 @@ class XWalkExtensionProcess : public IPC::Listener,
   XWalkExtensionProcess(
       const IPC::ChannelHandle& channel_handle = IPC::ChannelHandle());
 
-  virtual ~XWalkExtensionProcess();
-  virtual bool CheckAPIAccessControl(const std::string& extension_name,
-      const std::string& api_name) OVERRIDE;
-  virtual bool RegisterPermissions(const std::string& extension_name,
-      const std::string& perm_table) OVERRIDE;
+  ~XWalkExtensionProcess() override;
+  bool CheckAPIAccessControl(const std::string& extension_name,
+      const std::string& api_name) override;
+  bool RegisterPermissions(const std::string& extension_name,
+      const std::string& perm_table) override;
 
  private:
   // IPC::Listener implementation.
-  virtual bool OnMessageReceived(const IPC::Message& message) OVERRIDE;
+  bool OnMessageReceived(const IPC::Message& message) override;
 
   // Handlers for IPC messages from XWalkExtensionProcessHost.
   void OnRegisterExtensions(const base::FilePath& extension_path,

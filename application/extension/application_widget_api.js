@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-var application = requireNative('application');
 var common = requireNative('widget_common');
 
 var empty = "";
@@ -40,14 +39,7 @@ function defineReadOnlyProperty(object, key, value) {
   });
 }
 
-for (var key in widgetStringInfo) {
-  defineReadOnlyProperty(exports, key, widgetStringInfo[key]);
-}
-
 var WidgetStorage = function() {
-  var _keyList = new Array();
-  var _itemStorage = new Object();
-
   var _SetItem = function(itemKey, itemValue) {
     var result = extension.internal.sendSyncMessage({
         cmd: 'SetPreferencesItem',
@@ -55,9 +47,6 @@ var WidgetStorage = function() {
         preferencesItemValue: String(itemValue) });
 
     if (result) {
-      if (_itemStorage[String(itemKey)] == undefined)
-        _keyList.push(String(itemKey));
-      _itemStorage[String(itemKey)] = String(itemValue);
       return itemValue;
     } else {
       throw new common.CustomDOMException(
@@ -76,33 +65,36 @@ var WidgetStorage = function() {
   var _GetGetter = function(itemKey) {
     var _itemKey = itemKey;
     return function() {
-      return _itemStorage[String(_itemKey)];
+      var result = extension.internal.sendSyncMessage(
+          { cmd: 'GetItemValueByKey',
+            preferencesItemKey: String(itemKey) });
+      return result == empty ? null : result;
     }
   }
 
   this.init = function() {
-    var result = extension.internal.sendSyncMessage(
-        { cmd: 'GetAllItems' });
+    var result = extension.internal.sendSyncMessage({cmd: 'GetAllItems'});
     for (var itemKey in result) {
-      var itemValue = result[String(itemKey)];
-      _itemStorage[String(itemKey)] = itemValue;
       this.__defineSetter__(String(itemKey), _GetSetter(itemKey));
       this.__defineGetter__(String(itemKey), _GetGetter(itemKey));
-      _keyList.push(String(itemKey));
     }
   }
 
   this.__defineGetter__('length', function() {
-    return _keyList.length;
+    var result = extension.internal.sendSyncMessage({cmd: 'GetAllItems'});
+    return Object.keys(result).length;
   });
 
   this.key = function(index) {
-    return _keyList[index];
+    var result = extension.internal.sendSyncMessage({ cmd: 'GetAllItems'});
+    return Object.keys(result)[index];
   }
 
   this.getItem = function(itemKey) {
-    var item = _itemStorage[String(itemKey)];
-    return item !== undefined ? item : null;
+    var result = extension.internal.sendSyncMessage({
+        cmd: 'GetItemValueByKey',
+        preferencesItemKey: String(itemKey)});
+    return result == empty ? null : result;
   }
 
   this.setItem = function(itemKey, itemValue) {
@@ -112,13 +104,9 @@ var WidgetStorage = function() {
   this.removeItem = function(itemKey) {
     var result = extension.internal.sendSyncMessage({
         cmd: 'RemovePreferencesItem',
-        preferencesItemKey: String(itemKey) });
+        preferencesItemKey: String(itemKey)});
 
-    if (result) {
-      delete this[itemKey];
-      delete _itemStorage[itemKey];
-      _keyList.splice(_keyList.indexOf(String(itemKey)), 1);
-    } else {
+    if (!result) {
       throw new common.CustomDOMException(
           common.CustomDOMException.NO_MODIFICATION_ALLOWED_ERR,
           'The object can not be modified.');
@@ -126,42 +114,32 @@ var WidgetStorage = function() {
   }
 
   this.clear = function() {
-    var itemKey;
-    var result = extension.internal.sendSyncMessage({
-        cmd: 'ClearAllItems' });
-
-    if (!result)
-      return;
-
-    for (var i = _keyList.length-1; i >= 0; --i) {
-      // if the itemKey is still in DB(e.g. readonly),
-      // we should keep it in JS side.
-      var exists = extension.internal.sendSyncMessage({
-          cmd: 'KeyExists',
-          preferencesItemKey: _keyList[i] });
-
-      if (!exists) {
-        delete this[_keyList[i]];
-        delete _itemStorage[_keyList[i]];
-        _keyList.splice(i, 1);
-      }
-    }
+    extension.internal.sendSyncMessage({cmd: 'ClearAllItems'});
   }
 
   this.init();
 };
 
-var widgetStorage = new WidgetStorage();
-exports.preferences = widgetStorage;
+var Widget = function() {
+  for (var key in widgetStringInfo) {
+    defineReadOnlyProperty(this, key, widgetStringInfo[key]);
+  }
 
-exports.toString = function() {
-  return '[object Widget]';
+  this.preferences = new WidgetStorage();
+
+  Object.defineProperty(this, 'preferences', {
+    configurable: false,
+    enumerable: false,
+    get: function() {
+      return this;
+    }
+  });
+
+  this.toString = function() {
+    return '[object Widget]';
+  }
 }
 
-Object.defineProperty(exports, 'preferences', {
-  configurable: false,
-  enumerable: false,
-  get: function() {
-    return widgetStorage;
-  }
-});
+window.Widget = Widget;
+
+exports = new Widget();

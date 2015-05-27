@@ -6,8 +6,9 @@
 
 #include <string>
 
-#include "base/file_util.h"
+#include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
+#include "base/numerics/safe_conversions.h"
 #include "crypto/signature_verifier.h"
 #include "xwalk/application/common/id_util.h"
 
@@ -25,10 +26,11 @@ XPKPackage::~XPKPackage() {
 }
 
 XPKPackage::XPKPackage(const base::FilePath& path)
-    : Package(path) {
+    : Package(path, Manifest::TYPE_MANIFEST),
+      header_(),
+      zip_addr_(0) {
   if (!base::PathExists(path))
     return;
-  manifest_type_ = Manifest::TYPE_MANIFEST;
   scoped_ptr<base::ScopedFILE> file(
       new base::ScopedFILE(base::OpenFile(path, "rb")));
   file_ = file.Pass();
@@ -44,7 +46,10 @@ XPKPackage::XPKPackage(const base::FilePath& path)
       header_.signature_size <= XPKPackage::kMaxSignatureKeySize) {
     is_valid_ = true;
     zip_addr_ = sizeof(header_) + header_.key_size + header_.signature_size;
-    fseek(file_->get(), sizeof(header_), SEEK_SET);
+    if (fseek(file_->get(), sizeof(header_), SEEK_SET)) {
+      is_valid_ = false;
+      return;
+    }
     key_.resize(header_.key_size);
     size_t len = fread(&key_.front(), sizeof(uint8), header_.key_size,
         file_->get());
@@ -69,19 +74,20 @@ XPKPackage::XPKPackage(const base::FilePath& path)
 bool XPKPackage::VerifySignature() {
 // Set the file read position to the beginning of compressed resource file,
 // which is behind the magic header, public key and signature key.
-  fseek(file_->get(), zip_addr_, SEEK_SET);
+  if (fseek(file_->get(), zip_addr_, SEEK_SET))
+    return false;
   crypto::SignatureVerifier verifier;
   if (!verifier.VerifyInit(kSignatureAlgorithm,
                            sizeof(kSignatureAlgorithm),
                            &signature_.front(),
-                           signature_.size(),
+                           base::checked_cast<int>(signature_.size()),
                            &key_.front(),
-                           key_.size()))
+                           base::checked_cast<int>(key_.size())))
     return false;
   unsigned char buf[1 << 12];
   size_t len = 0;
   while ((len = fread(buf, 1, sizeof(buf), file_->get())) > 0)
-    verifier.VerifyUpdate(buf, len);
+    verifier.VerifyUpdate(buf, base::checked_cast<int>(len));
   if (!verifier.VerifyFinal())
     return false;
 

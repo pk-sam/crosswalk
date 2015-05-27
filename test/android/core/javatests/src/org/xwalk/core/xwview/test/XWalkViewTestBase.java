@@ -28,6 +28,7 @@ import org.chromium.content.browser.test.util.CallbackHelper;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 
+import org.xwalk.core.XWalkDownloadListener;
 import org.xwalk.core.XWalkJavascriptResult;
 import org.xwalk.core.XWalkNavigationHistory;
 import org.xwalk.core.XWalkNavigationItem;
@@ -89,6 +90,13 @@ public class XWalkViewTestBase
         }
 
         @Override
+        public boolean onConsoleMessage(XWalkView view, String message,
+                int lineNumber, String sourceId, ConsoleMessageType messageType) {
+            return mInnerContentsClient.onConsoleMessage(message,lineNumber,sourceId,
+                    messageType);
+        }
+
+        @Override
         public void openFileChooser(XWalkView view, ValueCallback<Uri> uploadFile,
                 String acceptType, String capture) {
             mInnerContentsClient.openFileChooser(uploadFile);
@@ -143,12 +151,41 @@ public class XWalkViewTestBase
         public boolean shouldOverrideUrlLoading(XWalkView view, String url) {
             return mTestHelperBridge.shouldOverrideUrlLoading(url);
         }
+
+        @Override
+        public void onLoadFinished(XWalkView view, String url) {
+            mInnerContentsClient.onLoadFinished(url);
+        }
     }
 
     class TestXWalkResourceClient extends TestXWalkResourceClientBase {
         public TestXWalkResourceClient() {
             super(mTestHelperBridge);
         }
+    }
+
+    class TestXWalkDownloadListener extends XWalkDownloadListener {
+        public TestXWalkDownloadListener(Context context) {
+            super(context);
+        }
+
+        @Override
+        public void onDownloadStart(String url, String userAgent,
+                String contentDisposition, String mimetype, long contentLength) {
+            mTestHelperBridge.onDownloadStart(url, userAgent, contentDisposition,
+                    mimetype, contentLength);
+        }
+    }
+
+    void setDownloadListener() {
+        final Context context = getActivity();
+        getInstrumentation().runOnMainSync(new Runnable() {
+            @Override
+            public void run() {
+                TestXWalkDownloadListener listener = new TestXWalkDownloadListener(context);
+                getXWalkView().setDownloadListener(listener);
+            }
+        });
     }
 
     void setUIClient(final XWalkUIClient client) {
@@ -342,7 +379,7 @@ public class XWalkViewTestBase
         int currentCallCount = getTitleHelper.getCallCount();
         String fileContent = getFileContent(fileName);
 
-        loadDataSync(fileName, fileContent, "text/html", false);
+        loadDataAsync(fileName, fileContent, "text/html", false);
 
         getTitleHelper.waitForCallback(currentCallCount, 1, WAIT_TIMEOUT_SECONDS,
                 TimeUnit.SECONDS);
@@ -378,13 +415,11 @@ public class XWalkViewTestBase
         runTestWaitPageFinished(new Runnable(){
             @Override
             public void run() {
-                getInstrumentation().runOnMainSync(new Runnable() {
-                    @Override
-                    public void run() {
-                        mXWalkView.getNavigationHistory().navigate(
-                            XWalkNavigationHistory.Direction.BACKWARD, 1);
-                    }
-                });
+                try {
+                    goBackAsync();
+                } catch (Throwable t) {
+                    t.printStackTrace();
+                }
             }
         });
     }
@@ -393,13 +428,31 @@ public class XWalkViewTestBase
         runTestWaitPageFinished(new Runnable(){
             @Override
             public void run() {
-                getInstrumentation().runOnMainSync(new Runnable() {
-                    @Override
-                    public void run() {
-                        mXWalkView.getNavigationHistory().navigate(
-                            XWalkNavigationHistory.Direction.FORWARD, 1);
-                    }
-                });
+                try {
+                    goForwardAsync();
+                } catch (Throwable t) {
+                    t.printStackTrace();
+                }
+            }
+        });
+    }
+
+    protected void goBackAsync() throws Throwable {
+        getInstrumentation().runOnMainSync(new Runnable() {
+            @Override
+            public void run() {
+                mXWalkView.getNavigationHistory().navigate(
+                    XWalkNavigationHistory.Direction.BACKWARD, 1);
+            }
+        });
+    }
+
+    protected void goForwardAsync() throws Throwable {
+        getInstrumentation().runOnMainSync(new Runnable() {
+            @Override
+            public void run() {
+                mXWalkView.getNavigationHistory().navigate(
+                    XWalkNavigationHistory.Direction.FORWARD, 1);
             }
         });
     }

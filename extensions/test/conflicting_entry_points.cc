@@ -12,6 +12,7 @@
 #include "xwalk/test/base/xwalk_test_utils.h"
 
 using namespace xwalk::extensions;  // NOLINT
+using xwalk::Runtime;
 
 namespace {
 
@@ -32,7 +33,7 @@ class CleanInstance : public XWalkExtensionInstance {
   CleanInstance() {
     g_clean_extension_loaded = true;
   }
-  virtual void HandleMessage(scoped_ptr<base::Value> msg) OVERRIDE {}
+  void HandleMessage(scoped_ptr<base::Value> msg) override {}
 };
 
 class DirtyInstance : public XWalkExtensionInstance {
@@ -40,7 +41,7 @@ class DirtyInstance : public XWalkExtensionInstance {
   DirtyInstance() {
     g_dirty_extension_loaded = true;
   }
-  virtual void HandleMessage(scoped_ptr<base::Value> msg) OVERRIDE {}
+  void HandleMessage(scoped_ptr<base::Value> msg) override {}
 };
 
 class CleanExtension : public XWalkExtension {
@@ -52,7 +53,7 @@ class CleanExtension : public XWalkExtension {
                        "window.FromClean = true;");
   }
 
-  virtual XWalkExtensionInstance* CreateInstance() OVERRIDE {
+  XWalkExtensionInstance* CreateInstance() override {
     return new CleanInstance;
   }
 };
@@ -65,7 +66,7 @@ class ConflictsWithNameExtension : public XWalkExtension {
     set_javascript_api("window.clean = 'fail';");
   }
 
-  virtual XWalkExtensionInstance* CreateInstance() OVERRIDE {
+  XWalkExtensionInstance* CreateInstance() override {
     return new DirtyInstance;
   }
 };
@@ -80,15 +81,15 @@ class ConflictsWithEntryPointExtension
     set_javascript_api("window.FromClean = 'fail';");
   }
 
-  virtual XWalkExtensionInstance* CreateInstance() OVERRIDE {
+  XWalkExtensionInstance* CreateInstance() override {
     return new DirtyInstance;
   }
 };
 
 class XWalkExtensionsConflictsWithNameTest : public XWalkExtensionsTestBase {
  public:
-  virtual void CreateExtensionsForUIThread(
-      XWalkExtensionVector* extensions) OVERRIDE {
+  void CreateExtensionsForUIThread(
+      XWalkExtensionVector* extensions) override {
     extensions->push_back(new CleanExtension);
     extensions->push_back(new ConflictsWithNameExtension);
   }
@@ -97,8 +98,8 @@ class XWalkExtensionsConflictsWithNameTest : public XWalkExtensionsTestBase {
 class XWalkExtensionsConflictsWithEntryPointTest
     : public XWalkExtensionsTestBase {
  public:
-  virtual void CreateExtensionsForUIThread(
-      XWalkExtensionVector* extensions) OVERRIDE {
+  void CreateExtensionsForUIThread(
+      XWalkExtensionVector* extensions) override {
     extensions->push_back(new CleanExtension);
     extensions->push_back(new ConflictsWithEntryPointExtension);
   }
@@ -106,14 +107,14 @@ class XWalkExtensionsConflictsWithEntryPointTest
 
 IN_PROC_BROWSER_TEST_F(XWalkExtensionsConflictsWithNameTest,
                        OnlyCleanInstanceLoaded) {
-  content::RunAllPendingInMessageLoop();
+  Runtime* runtime = CreateRuntime();
   GURL url = GetExtensionsTestURL(
       base::FilePath(),
       base::FilePath().AppendASCII("conflicting_names.html"));
 
-  content::TitleWatcher title_watcher(runtime()->web_contents(), kPassString);
+  content::TitleWatcher title_watcher(runtime->web_contents(), kPassString);
   title_watcher.AlsoWaitForTitle(kFailString);
-  xwalk_test_utils::NavigateToURL(runtime(), url);
+  xwalk_test_utils::NavigateToURL(runtime, url);
   EXPECT_EQ(kPassString, title_watcher.WaitAndGetTitle());
 
   EXPECT_TRUE(g_clean_extension_loaded);
@@ -122,14 +123,14 @@ IN_PROC_BROWSER_TEST_F(XWalkExtensionsConflictsWithNameTest,
 
 IN_PROC_BROWSER_TEST_F(XWalkExtensionsConflictsWithEntryPointTest,
                        OnlyCleanInstanceLoaded) {
-  content::RunAllPendingInMessageLoop();
+  Runtime* runtime = CreateRuntime();
   GURL url = GetExtensionsTestURL(
       base::FilePath(),
       base::FilePath().AppendASCII("conflicting_names.html"));
 
-  content::TitleWatcher title_watcher(runtime()->web_contents(), kPassString);
+  content::TitleWatcher title_watcher(runtime->web_contents(), kPassString);
   title_watcher.AlsoWaitForTitle(kFailString);
-  xwalk_test_utils::NavigateToURL(runtime(), url);
+  xwalk_test_utils::NavigateToURL(runtime, url);
   EXPECT_EQ(kPassString, title_watcher.WaitAndGetTitle());
 
   EXPECT_TRUE(g_clean_extension_loaded);

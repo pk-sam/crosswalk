@@ -23,7 +23,6 @@
 #include "net/socket/tcp_listen_socket.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/snapshot/snapshot.h"
-#include "xwalk/runtime/browser/runtime.h"
 
 using content::DevToolsAgentHost;
 using content::RenderViewHost;
@@ -36,12 +35,14 @@ const char kTargetTypePage[] = "page";
 const char kTargetTypeServiceWorker[] = "service_worker";
 const char kTargetTypeOther[] = "other";
 
+const char kWebUIScheme[] = "chrome";
+
 class Target : public content::DevToolsTarget {
  public:
   explicit Target(scoped_refptr<content::DevToolsAgentHost> agent_host);
 
-  virtual std::string GetId() const OVERRIDE { return agent_host_->GetId(); }
-  virtual std::string GetType() const OVERRIDE {
+  std::string GetId() const override { return agent_host_->GetId(); }
+  std::string GetType() const override {
       switch (agent_host_->GetType()) {
         case content::DevToolsAgentHost::TYPE_WEB_CONTENTS:
            return kTargetTypePage;
@@ -52,24 +53,24 @@ class Target : public content::DevToolsTarget {
        }
        return kTargetTypeOther;
      }
-  virtual std::string GetTitle() const OVERRIDE {
+  std::string GetTitle() const override {
     return agent_host_->GetTitle();
   }
-  virtual std::string GetDescription() const OVERRIDE { return std::string(); }
-  virtual GURL GetURL() const OVERRIDE { return  agent_host_->GetURL(); }
-  virtual GURL GetFaviconURL() const OVERRIDE { return favicon_url_; }
-  virtual base::TimeTicks GetLastActivityTime() const OVERRIDE {
+  std::string GetDescription() const override { return std::string(); }
+  GURL GetURL() const override { return  agent_host_->GetURL(); }
+  GURL GetFaviconURL() const override { return favicon_url_; }
+  base::TimeTicks GetLastActivityTime() const override {
     return last_activity_time_;
   }
-  virtual std::string GetParentId() const OVERRIDE { return std::string(); }
-  virtual bool IsAttached() const OVERRIDE {
+  std::string GetParentId() const override { return std::string(); }
+  bool IsAttached() const override {
     return agent_host_->IsAttached();
   }
-  virtual scoped_refptr<DevToolsAgentHost> GetAgentHost() const OVERRIDE {
+  scoped_refptr<DevToolsAgentHost> GetAgentHost() const override {
     return agent_host_;
   }
-  virtual bool Activate() const OVERRIDE;
-  virtual bool Close() const OVERRIDE;
+  bool Activate() const override;
+  bool Close() const override;
 
  private:
   GURL GetFaviconDataURL(WebContents* web_contents) const;
@@ -84,12 +85,15 @@ class Target : public content::DevToolsTarget {
 Target::Target(scoped_refptr<content::DevToolsAgentHost> agent_host)
     : agent_host_(agent_host) {
   if (content::WebContents* web_contents = agent_host_->GetWebContents()) {
+// The front-end (chrome://inspect) for Android WebView doesn't need Favicon.
+#if !defined(OS_ANDROID)
     content::NavigationController& controller = web_contents->GetController();
     content::NavigationEntry* entry = controller.GetActiveEntry();
     if (entry != NULL && entry->GetURL().is_valid())
       favicon_url_ = entry->GetFavicon().url;
-    if (favicon_url_.is_empty())
+    if (favicon_url_.is_empty() && !entry->GetURL().SchemeIs(kWebUIScheme))
       favicon_url_ = GetFaviconDataURL(web_contents);
+#endif
     last_activity_time_ = web_contents->GetLastActiveTime();
   }
 }
@@ -124,14 +128,14 @@ namespace xwalk {
 
 namespace {
 Runtime* CreateWithDefaultWindow(
-    RuntimeContext* runtime_context, const GURL& url,
-    Runtime::Observer* observer = NULL) {
-  Runtime* runtime = Runtime::Create(runtime_context, observer);
+    XWalkBrowserContext* browser_context, const GURL& url,
+    Runtime::Observer* observer) {
+  Runtime* runtime = Runtime::Create(browser_context);
+  runtime->set_observer(observer);
   runtime->LoadURL(url);
 #if !defined(OS_ANDROID)
-  RuntimeUIStrategy ui_strategy;
-  NativeAppWindow::CreateParams params;
-  ui_strategy.Show(runtime, params);
+  runtime->set_ui_delegate(DefaultRuntimeUIDelegate::Create(runtime));
+  runtime->Show();
 #endif
   return runtime;
 }
@@ -151,6 +155,8 @@ std::string XWalkDevToolsHttpHandlerDelegate::GetDiscoveryPageHTML() {
 void XWalkDevToolsDelegate::ProcessAndSaveThumbnail(
     const GURL& url,
     scoped_refptr<base::RefCountedBytes> png) {
+  if (!png.get())
+    return;
   const std::vector<unsigned char>& png_data = png->data();
   std::string png_string_data(reinterpret_cast<const char*>(&png_data[0]),
                               png_data.size());
@@ -165,15 +171,8 @@ base::FilePath XWalkDevToolsHttpHandlerDelegate::GetDebugFrontendDir() {
   return base::FilePath();
 }
 
-scoped_ptr<net::StreamListenSocket>
-XWalkDevToolsHttpHandlerDelegate::CreateSocketForTethering(
-    net::StreamListenSocket::Delegate* delegate,
-    std::string* name) {
-  return scoped_ptr<net::StreamListenSocket>();
-}
-
-XWalkDevToolsDelegate::XWalkDevToolsDelegate(RuntimeContext* runtime_context)
-    : runtime_context_(runtime_context),
+XWalkDevToolsDelegate::XWalkDevToolsDelegate(XWalkBrowserContext* context)
+    : browser_context_(context),
       weak_factory_(this) {
 }
 
@@ -217,7 +216,7 @@ std::string XWalkDevToolsDelegate::GetPageThumbnailData(const GURL& url) {
 scoped_ptr<content::DevToolsTarget>
 XWalkDevToolsDelegate::CreateNewTarget(const GURL& url) {
   Runtime* runtime = CreateWithDefaultWindow(
-      runtime_context_, GURL(url::kAboutBlankURL));
+      browser_context_, url, this);
   return scoped_ptr<content::DevToolsTarget>(
       new Target(DevToolsAgentHost::GetOrCreateFor(runtime->web_contents())));
 }
@@ -226,16 +225,20 @@ void XWalkDevToolsDelegate::EnumerateTargets(TargetCallback callback) {
   TargetList targets;
   content::DevToolsAgentHost::List agents =
       content::DevToolsAgentHost::GetOrCreateAll();
-  for (content::DevToolsAgentHost::List::iterator it = agents.begin();
-       it != agents.end(); ++it) {
-#if !defined(OS_ANDROID)
-    Runtime* runtime =
-        static_cast<Runtime*>((*it)->GetWebContents()->GetDelegate());
-    if (runtime && runtime->remote_debugging_enabled())
-#endif
-      targets.push_back(new Target(*it));
+  for (auto& it : agents) {
+    targets.push_back(new Target(it));
   }
   callback.Run(targets);
+}
+
+void XWalkDevToolsDelegate::OnNewRuntimeAdded(Runtime* runtime) {
+  runtime->set_observer(this);
+  runtime->set_ui_delegate(DefaultRuntimeUIDelegate::Create(runtime));
+  runtime->Show();
+}
+
+void XWalkDevToolsDelegate::OnRuntimeClosed(Runtime* runtime) {
+  delete runtime;
 }
 
 }  // namespace xwalk

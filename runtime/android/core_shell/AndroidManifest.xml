@@ -9,7 +9,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="org.xwalk.core.xwview.shell">
 
-    <application android:name="android.app.Application"
+    <application android:name="org.xwalk.core.XWalkApplication"
         android:label="XWalkCoreShell" android:hardwareAccelerated="true">
         <activity android:name="org.xwalk.core.xwview.shell.XWalkViewShellActivity"
             android:theme="@android:style/Theme.Holo.Light"
@@ -31,7 +31,7 @@
             android:authorities="org.xwalk.core.xwview.test.TestContentProvider" />
     </application>
 
-  <uses-sdk android:minSdkVersion="14" android:targetSdkVersion="19" />
+  <uses-sdk android:minSdkVersion="14" android:targetSdkVersion="21" />
   <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
   <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
   <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />

@@ -3,8 +3,8 @@
 // found in the LICENSE file.
 
 #include "base/command_line.h"
-#include "base/file_util.h"
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/memory/linked_ptr.h"
 #include "base/process/launch.h"
@@ -22,18 +22,19 @@
 class XWalkTestLauncherDelegate : public content::TestLauncherDelegate {
  public:
   XWalkTestLauncherDelegate() {}
-  virtual ~XWalkTestLauncherDelegate() {}
+  ~XWalkTestLauncherDelegate() override {}
 
-  virtual int RunTestSuite(int argc, char** argv) OVERRIDE {
+  int RunTestSuite(int argc, char** argv) override {
     return XWalkTestSuite(argc, argv).Run();
   }
 
-  virtual bool AdjustChildProcessCommandLine(
-      CommandLine* command_line, const base::FilePath& temp_data_dir) OVERRIDE {
-    CommandLine new_command_line(command_line->GetProgram());
-    CommandLine::SwitchMap switches = command_line->GetSwitches();
+  bool AdjustChildProcessCommandLine(
+      base::CommandLine* command_line,
+      const base::FilePath& temp_data_dir) override {
+    base::CommandLine new_command_line(command_line->GetProgram());
+    base::CommandLine::SwitchMap switches = command_line->GetSwitches();
 
-    for (CommandLine::SwitchMap::const_iterator iter = switches.begin();
+    for (base::CommandLine::SwitchMap::const_iterator iter = switches.begin();
          iter != switches.end(); ++iter) {
       new_command_line.AppendSwitchNative((*iter).first, (*iter).second);
     }
@@ -48,7 +49,7 @@ class XWalkTestLauncherDelegate : public content::TestLauncherDelegate {
   }
 
  protected:
-  virtual content::ContentMainDelegate* CreateContentMainDelegate() OVERRIDE {
+  content::ContentMainDelegate* CreateContentMainDelegate() override {
 #if defined(OS_WIN) || defined (OS_LINUX)
     return new xwalk::XWalkMainDelegate();
 #else

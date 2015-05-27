@@ -6,6 +6,8 @@
 
 #include "base/command_line.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/autofill/content/renderer/autofill_agent.h"
+#include "components/autofill/content/renderer/password_autofill_agent.h"
 #include "components/nacl/renderer/ppb_nacl_private_impl.h"
 #include "components/visitedlink/renderer/visitedlink_slave.h"
 #include "content/public/renderer/render_frame.h"
@@ -22,6 +24,7 @@
 #include "xwalk/application/renderer/application_native_module.h"
 #include "xwalk/extensions/common/xwalk_extension_switches.h"
 #include "xwalk/extensions/renderer/xwalk_js_module.h"
+#include "xwalk/runtime/common/xwalk_common_messages.h"
 #include "xwalk/runtime/common/xwalk_localized_error.h"
 #include "xwalk/runtime/renderer/isolated_file_system.h"
 #include "xwalk/runtime/renderer/pepper/pepper_helper.h"
@@ -35,15 +38,12 @@
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #endif
 
-#if defined(OS_TIZEN)
-#include "xwalk/runtime/common/xwalk_common_messages.h"
-#endif
-
 #if defined(OS_TIZEN_MOBILE)
 #include "xwalk/runtime/renderer/tizen/xwalk_content_renderer_client_tizen.h"
 #endif
 
 #if defined(OS_TIZEN)
+#include "third_party/WebKit/public/web/WebScriptSource.h"
 #include "xwalk/runtime/renderer/tizen/xwalk_render_view_ext_tizen.h"
 #endif
 
@@ -67,18 +67,42 @@ class XWalkFrameHelper
       : content::RenderFrameObserver(render_frame),
         content::RenderFrameObserverTracker<XWalkFrameHelper>(render_frame),
         extension_controller_(extension_controller) {}
-  virtual ~XWalkFrameHelper() {}
+  ~XWalkFrameHelper() override {}
 
   // RenderFrameObserver implementation.
-  virtual void WillReleaseScriptContext(v8::Handle<v8::Context> context,
-                                        int world_id) OVERRIDE {
+  void DidCreateScriptContext(v8::Handle<v8::Context> context,
+                              int extension_group, int world_id) override {
+    if (extension_controller_)
+      extension_controller_->DidCreateScriptContext(
+          render_frame()->GetWebFrame(), context);
+
+#if defined(OS_TIZEN)
+    const std::string code =
+        "(function() {"
+        "  window.eventListenerList = [];"
+        "  window._addEventListener = window.addEventListener;"
+        "  window.addEventListener = function(event, callback, useCapture) {"
+        "    if (event == 'storage') {"
+        "      window.eventListenerList.push(callback);"
+        "    }"
+        "    window._addEventListener(event, callback, useCapture);"
+        "  }"
+        "})();";
+    const blink::WebScriptSource source =
+      blink::WebScriptSource(base::ASCIIToUTF16(code));
+    render_frame()->GetWebFrame()->executeScript(source);
+#endif
+  }
+  void WillReleaseScriptContext(v8::Handle<v8::Context> context,
+                                int world_id) override {
     if (extension_controller_)
       extension_controller_->WillReleaseScriptContext(
           render_frame()->GetWebFrame(), context);
   }
 
 #if defined(OS_TIZEN)
-  virtual void DidCommitProvisionalLoad(bool is_new_navigation) OVERRIDE {
+  void DidCommitProvisionalLoad(bool is_new_navigation,
+                                bool is_same_page_navigation) override {
     blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
     GURL url(frame->document().url());
     if (url.SchemeIs(application::kApplicationScheme)) {
@@ -110,7 +134,7 @@ XWalkContentRendererClient::~XWalkContentRendererClient() {
 }
 
 void XWalkContentRendererClient::RenderThreadStarted() {
-  CommandLine* cmd_line = CommandLine::ForCurrentProcess();
+  base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
   if (!cmd_line->HasSwitch(switches::kXWalkDisableExtensions))
     extension_controller_.reset(
         new extensions::XWalkExtensionRendererController(this));
@@ -147,6 +171,14 @@ void XWalkContentRendererClient::RenderFrameCreated(
 #if !defined(DISABLE_NACL)
   new nacl::NaClHelper(render_frame);
 #endif
+
+  // The following code was copied from
+  // android_webview/renderer/aw_content_renderer_client.cc
+  // TODO(sgurun) do not create a password autofill agent (change
+  // autofill agent to store a weakptr).
+  autofill::PasswordAutofillAgent* password_autofill_agent =
+      new autofill::PasswordAutofillAgent(render_frame);
+  new autofill::AutofillAgent(render_frame, password_autofill_agent, nullptr);
 }
 
 void XWalkContentRendererClient::RenderViewCreated(
@@ -156,13 +188,6 @@ void XWalkContentRendererClient::RenderViewCreated(
 #elif defined(OS_TIZEN)
   XWalkRenderViewExtTizen::RenderViewCreated(render_view);
 #endif
-}
-
-void XWalkContentRendererClient::DidCreateScriptContext(
-    blink::WebFrame* frame, v8::Handle<v8::Context> context,
-    int extension_group, int world_id) {
-  if (extension_controller_)
-    extension_controller_->DidCreateScriptContext(frame, context);
 }
 
 void XWalkContentRendererClient::DidCreateModuleSystem(
@@ -220,23 +245,16 @@ bool XWalkContentRendererClient::WillSendRequest(blink::WebFrame* frame,
 #if defined(OS_ANDROID)
   return false;
 #else
-  if (!xwalk_render_process_observer_->IsWarpMode()
-#if defined(OS_TIZEN)
-      && !xwalk_render_process_observer_->IsCSPMode()
-#endif
-      )
+  if (!xwalk_render_process_observer_->IsWarpMode() &&
+      !xwalk_render_process_observer_->IsCSPMode())
     return false;
 
   GURL origin_url(frame->document().url());
   GURL app_url(xwalk_render_process_observer_->app_url());
-#if defined(OS_TIZEN)
   // if under CSP mode.
   if (xwalk_render_process_observer_->IsCSPMode()) {
-    if (url.GetOrigin() != app_url.GetOrigin() &&
-        origin_url != first_party_for_cookies &&
-        !first_party_for_cookies.is_empty() &&
-        first_party_for_cookies.GetOrigin() != app_url.GetOrigin() &&
-        !blink::WebSecurityOrigin::create(app_url).canRequest(url)) {
+    if (!origin_url.is_empty() && origin_url != first_party_for_cookies &&
+        !xwalk_render_process_observer_->CanRequest(app_url, url)) {
       LOG(INFO) << "[BLOCK] allow-navigation: " << url.spec();
       content::RenderThread::Get()->Send(new ViewMsg_OpenLinkExternal(url));
       *new_url = GURL();
@@ -244,11 +262,11 @@ bool XWalkContentRendererClient::WillSendRequest(blink::WebFrame* frame,
     }
     return false;
   }
-#endif
+
   // if under WARP mode.
   if (url.GetOrigin() == app_url.GetOrigin() ||
-      blink::WebSecurityOrigin::create(app_url).canRequest(url)) {
-    LOG(INFO) << "[PASS] " << origin_url.spec() << " request " << url.spec();
+      xwalk_render_process_observer_->CanRequest(app_url, url)) {
+    DLOG(INFO) << "[PASS] " << origin_url.spec() << " request " << url.spec();
     return false;
   }
 
@@ -259,7 +277,6 @@ bool XWalkContentRendererClient::WillSendRequest(blink::WebFrame* frame,
       first_party_for_cookies.GetOrigin() != app_url.GetOrigin())
     content::RenderThread::Get()->Send(new ViewMsg_OpenLinkExternal(url));
 #endif
-
   *new_url = GURL();
   return true;
 #endif

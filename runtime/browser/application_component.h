@@ -10,7 +10,7 @@
 
 namespace xwalk {
 
-class RuntimeContext;
+class XWalkBrowserContext;
 
 namespace application {
 class ApplicationSystem;
@@ -21,8 +21,8 @@ class ApplicationSystem;
 // Applications being launched.
 class ApplicationComponent : public XWalkComponent {
  public:
-  explicit ApplicationComponent(RuntimeContext* runtime_context);
-  virtual ~ApplicationComponent();
+  explicit ApplicationComponent(XWalkBrowserContext* browser_context);
+  ~ApplicationComponent() override;
 
   // Used by Android since extensions for Application are not supported there.
   void DisableExtensions() { extensions_enabled_ = false; }
@@ -31,12 +31,12 @@ class ApplicationComponent : public XWalkComponent {
 
  private:
   // XWalkComponent implementation.
-  virtual void CreateUIThreadExtensions(
+  void CreateUIThreadExtensions(
       content::RenderProcessHost* host,
-      extensions::XWalkExtensionVector* extensions) OVERRIDE;
-  virtual void CreateExtensionThreadExtensions(
+      extensions::XWalkExtensionVector* extensions) override;
+  void CreateExtensionThreadExtensions(
       content::RenderProcessHost* host,
-      extensions::XWalkExtensionVector* extensions) OVERRIDE;
+      extensions::XWalkExtensionVector* extensions) override;
 
   scoped_ptr<application::ApplicationSystem> app_system_;
   bool extensions_enabled_;

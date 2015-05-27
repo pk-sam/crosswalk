@@ -6,8 +6,10 @@
 #include "xwalk/runtime/browser/runtime_url_request_context_getter.h"
 
 #include <algorithm>
+#include <string>
 #include <vector>
 
+#include "base/command_line.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -40,6 +42,8 @@
 #include "net/url_request/url_request_job_factory_impl.h"
 #include "xwalk/application/common/constants.h"
 #include "xwalk/runtime/browser/runtime_network_delegate.h"
+#include "xwalk/runtime/common/xwalk_content_client.h"
+#include "xwalk/runtime/common/xwalk_switches.h"
 
 #if defined(OS_ANDROID)
 #include "xwalk/runtime/browser/android/cookie_manager.h"
@@ -52,6 +56,24 @@
 using content::BrowserThread;
 
 namespace xwalk {
+
+int GetDiskCacheSize() {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+
+  if (!command_line->HasSwitch(switches::kDiskCacheSize))
+      return 0;
+
+  std::string str_value = command_line->GetSwitchValueASCII(
+      switches::kDiskCacheSize);
+
+  int size = 0;
+  if (!base::StringToInt(str_value, &size)) {
+      LOG(ERROR) << "The value " << str_value
+                 << " can not be converted to integer, ignoring!";
+  }
+
+  return size;
+}
 
 RuntimeURLRequestContextGetter::RuntimeURLRequestContextGetter(
     bool ignore_certificate_errors,
@@ -110,11 +132,11 @@ net::URLRequestContext* RuntimeURLRequestContextGetter::GetURLRequestContext() {
         &cookieable_schemes[0], cookieable_schemes.size());
     storage_->set_cookie_store(cookie_store);
 #endif
-    storage_->set_channel_id_service(new net::ChannelIDService(
+    storage_->set_channel_id_service(make_scoped_ptr(new net::ChannelIDService(
         new net::DefaultChannelIDStore(NULL),
-        base::WorkerPool::GetTaskRunner(true)));
-    storage_->set_http_user_agent_settings(
-        new net::StaticHttpUserAgentSettings("en-us,en", base::EmptyString()));
+        base::WorkerPool::GetTaskRunner(true))));
+    storage_->set_http_user_agent_settings(new net::StaticHttpUserAgentSettings(
+        "en-us,en", xwalk::GetUserAgent()));
 
     scoped_ptr<net::HostResolver> host_resolver(
         net::HostResolver::CreateDefaultResolver(NULL));
@@ -138,7 +160,7 @@ net::URLRequestContext* RuntimeURLRequestContextGetter::GetURLRequestContext() {
             net::DISK_CACHE,
             net::CACHE_BACKEND_DEFAULT,
             cache_path,
-            0,
+            GetDiskCacheSize(),
             BrowserThread::GetMessageLoopProxyForThread(
                 BrowserThread::CACHE));
 
@@ -234,7 +256,7 @@ net::URLRequestContext* RuntimeURLRequestContextGetter::GetURLRequestContext() {
     // The chain of responsibility will execute the handlers in reverse to the
     // order in which the elements of the chain are created.
     scoped_ptr<net::URLRequestJobFactory> job_factory(
-        job_factory_impl.PassAs<net::URLRequestJobFactory>());
+        job_factory_impl.Pass());
     for (URLRequestInterceptorVector::reverse_iterator
              i = request_interceptors.rbegin();
          i != request_interceptors.rend();
@@ -245,7 +267,7 @@ net::URLRequestContext* RuntimeURLRequestContextGetter::GetURLRequestContext() {
 
     // Set up interceptors in the reverse order.
     scoped_ptr<net::URLRequestJobFactory> top_job_factory =
-        job_factory.PassAs<net::URLRequestJobFactory>();
+        job_factory.Pass();
     for (content::URLRequestInterceptorScopedVector::reverse_iterator i =
              request_interceptors_.rbegin();
          i != request_interceptors_.rend();

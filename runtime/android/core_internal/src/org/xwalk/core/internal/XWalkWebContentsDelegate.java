@@ -13,7 +13,9 @@ import org.chromium.components.web_contents_delegate_android.WebContentsDelegate
 @JNINamespace("xwalk")
 abstract class XWalkWebContentsDelegate extends WebContentsDelegateAndroid {
     @CalledByNative
-    public abstract boolean shouldOpenWithDefaultBrowser(String contentUrl);
+    public boolean shouldCreateWebContents(String targetUrl) {
+        return true;
+    }
 
     @CalledByNative
     public abstract boolean addNewContents(boolean isDialog, boolean isUserGesture);
@@ -32,6 +34,10 @@ abstract class XWalkWebContentsDelegate extends WebContentsDelegateAndroid {
 
     @CalledByNative
     public abstract void handleKeyboardEvent(KeyEvent event);
+
+    @CalledByNative
+    public abstract boolean addMessageToConsole(int level, String message,
+            int lineNumber,String sourceId);
 
     @CalledByNative
     public abstract boolean shouldOverrideRunFileChooser(

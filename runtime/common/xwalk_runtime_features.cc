@@ -22,7 +22,10 @@ struct MatchRuntimeFeature
   const std::string name;
 };
 
-XWalkRuntimeFeatures::RuntimeFeature::RuntimeFeature() {}
+XWalkRuntimeFeatures::RuntimeFeature::RuntimeFeature()
+    : status(Experimental),
+      enabled(false) {
+}
 
 // static
 XWalkRuntimeFeatures* XWalkRuntimeFeatures::GetInstance() {
@@ -30,10 +33,11 @@ XWalkRuntimeFeatures* XWalkRuntimeFeatures::GetInstance() {
 }
 
 XWalkRuntimeFeatures::XWalkRuntimeFeatures()
-  : command_line_(0)
-  , initialized_(false) {}
+  : command_line_(0),
+    initialized_(false),
+    experimental_features_enabled_(false) {}
 
-void XWalkRuntimeFeatures::Initialize(const CommandLine* cmd) {
+void XWalkRuntimeFeatures::Initialize(const base::CommandLine* cmd) {
   command_line_ = cmd;
   initialized_ = true;
   runtime_features_.clear();
@@ -56,9 +60,6 @@ void XWalkRuntimeFeatures::Initialize(const CommandLine* cmd) {
              "JavaScript support for peeking at device capabilities", Stable);
   AddFeature("StorageAPI", "storage",
              "JavaScript support to file system beyond W3C spec", Stable);
-  AddFeature("DialogAPI", "dialog",
-             "JavaScript support to create open/save native dialogs"
-             , Experimental);
 }
 
 XWalkRuntimeFeatures::~XWalkRuntimeFeatures() {}
@@ -72,6 +73,7 @@ void XWalkRuntimeFeatures::AddFeature(const char* name,
   feature.description = description;
   feature.command_line_switch = command_line_switch;
   feature.status = status;
+  feature.enabled = false;
 
   if (experimental_features_enabled_) {
     feature.enabled = true;

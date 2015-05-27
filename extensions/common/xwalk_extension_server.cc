@@ -4,9 +4,9 @@
 
 #include "xwalk/extensions/common/xwalk_extension_server.h"
 
-#include "base/file_util.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/memory/shared_memory.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
@@ -54,7 +54,9 @@ bool XWalkExtensionServer::OnMessageReceived(const IPC::Message& message) {
 }
 
 void XWalkExtensionServer::OnChannelConnected(int32 peer_pid) {
-  CHECK(base::OpenProcessHandle(peer_pid, &renderer_process_handle_));
+  base::Process process = base::Process::Open(peer_pid);
+  renderer_process_handle_ = process.Handle();
+  CHECK(process.IsValid());
 }
 
 void XWalkExtensionServer::OnCreateInstance(int64_t instance_id,
@@ -177,12 +179,9 @@ bool XWalkExtensionServer::RegisterExtension(
     return false;
   }
 
-  const base::ListValue& entry_points = extension->entry_points();
-  base::ListValue::const_iterator it = entry_points.begin();
+  const std::vector<std::string>& entry_points = extension->entry_points();
 
-  for (; it != entry_points.end(); ++it) {
-    std::string entry_point;
-    (*it)->GetAsString(&entry_point);
+  for (const std::string& entry_point : entry_points) {
     extension_symbols_.insert(entry_point);
   }
 
@@ -280,14 +279,8 @@ void XWalkExtensionServer::DeleteInstanceMap() {
 }
 
 bool XWalkExtensionServer::ValidateExtensionEntryPoints(
-    const base::ListValue& entry_points) {
-  base::ListValue::const_iterator it = entry_points.begin();
-
-  for (; it != entry_points.end(); ++it) {
-    std::string entry_point;
-
-    (*it)->GetAsString(&entry_point);
-
+    const std::vector<std::string>& entry_points) {
+  for (const std::string& entry_point : entry_points) {
     if (!ValidateExtensionIdentifier(entry_point))
       return false;
 
@@ -357,11 +350,8 @@ void XWalkExtensionServer::OnGetExtensions(
     extension_parameters.name = extension->name();
     extension_parameters.js_api = extension->javascript_api();
 
-    const base::ListValue& entry_points = extension->entry_points();
-    base::ListValue::const_iterator entry_it = entry_points.begin();
-    for (; entry_it != entry_points.end(); ++entry_it) {
-      std::string entry_point;
-      (*entry_it)->GetAsString(&entry_point);
+    const std::vector<std::string>& entry_points = extension->entry_points();
+    for (const std::string& entry_point : entry_points) {
       extension_parameters.entry_points.push_back(entry_point);
     }
 
@@ -418,7 +408,7 @@ std::vector<std::string> RegisterExternalExtensionsInDirectory(
       extension->set_permissions_delegate(server->permissions_delegate());
     if (extension->Initialize()) {
       registered_extensions.push_back(extension->name());
-      server->RegisterExtension(extension.PassAs<XWalkExtension>());
+      server->RegisterExtension(extension.Pass());
     } else {
       LOG(WARNING) << "Failed to initialize extension: "
                    << extension_path.AsUTF8Unsafe();

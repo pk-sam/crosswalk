@@ -11,6 +11,7 @@
 #include "xwalk/test/base/xwalk_test_utils.h"
 
 using namespace xwalk::extensions;  // NOLINT
+using xwalk::Runtime;
 
 const char kInProcessExtensionThread[] = "in_process_extension_thread";
 const char kInProcessUIThread[] = "in_process_ui_thread";
@@ -28,14 +29,14 @@ class InProcessExtensionInstance : public XWalkExtensionInstance {
     scoped_ptr<base::ListValue> reply(new base::ListValue);
     reply->AppendBoolean(is_on_ui_thread);
 
-    return reply.PassAs<base::Value>();
+    return reply.Pass();
   }
 
-  virtual void HandleMessage(scoped_ptr<base::Value> msg) OVERRIDE {
+  void HandleMessage(scoped_ptr<base::Value> msg) override {
     PostMessageToJS(InRunningOnUIThread());
   }
 
-  virtual void HandleSyncMessage(scoped_ptr<base::Value> msg) OVERRIDE {
+  void HandleSyncMessage(scoped_ptr<base::Value> msg) override {
     SendSyncReplyToJS(InRunningOnUIThread());
   }
 };
@@ -58,33 +59,32 @@ class InProcessExtension : public XWalkExtension {
       "};");
   }
 
-  virtual XWalkExtensionInstance* CreateInstance() OVERRIDE {
+  XWalkExtensionInstance* CreateInstance() override {
     return new InProcessExtensionInstance();
   }
 };
 
 class InProcessThreadsTest : public XWalkExtensionsTestBase {
  public:
-  virtual void CreateExtensionsForUIThread(
-      XWalkExtensionVector* extensions) OVERRIDE {
+  void CreateExtensionsForUIThread(
+      XWalkExtensionVector* extensions) override {
     extensions->push_back(new InProcessExtension(kInProcessUIThread));
   }
 
-  virtual void CreateExtensionsForExtensionThread(
-      XWalkExtensionVector* extensions) OVERRIDE {
+  void CreateExtensionsForExtensionThread(
+      XWalkExtensionVector* extensions) override {
     extensions->push_back(new InProcessExtension(kInProcessExtensionThread));
   }
 };
 
 IN_PROC_BROWSER_TEST_F(InProcessThreadsTest, InProcessThreads) {
-  content::RunAllPendingInMessageLoop();
-
-  content::TitleWatcher title_watcher(runtime()->web_contents(), kPassString);
+  Runtime* runtime = CreateRuntime();
+  content::TitleWatcher title_watcher(runtime->web_contents(), kPassString);
   title_watcher.AlsoWaitForTitle(kFailString);
 
   GURL url = GetExtensionsTestURL(base::FilePath(),
       base::FilePath().AppendASCII("in_process_threads.html"));
-  xwalk_test_utils::NavigateToURL(runtime(), url);
+  xwalk_test_utils::NavigateToURL(runtime, url);
 
   EXPECT_EQ(kPassString, title_watcher.WaitAndGetTitle());
 }

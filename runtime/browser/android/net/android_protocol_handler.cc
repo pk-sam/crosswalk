@@ -24,7 +24,7 @@
 #include "xwalk/runtime/browser/android/net/android_stream_reader_url_request_job.h"
 #include "xwalk/runtime/browser/android/net/input_stream_impl.h"
 #include "xwalk/runtime/browser/android/net/url_constants.h"
-#include "xwalk/runtime/browser/runtime_context.h"
+#include "xwalk/runtime/browser/xwalk_browser_context.h"
 #include "xwalk/runtime/browser/xwalk_runner.h"
 
 using base::android::AttachCurrentThread;
@@ -64,34 +64,34 @@ class AndroidStreamReaderURLRequestJobDelegateImpl
  public:
   AndroidStreamReaderURLRequestJobDelegateImpl();
 
-  virtual scoped_ptr<InputStream> OpenInputStream(
+  scoped_ptr<InputStream> OpenInputStream(
       JNIEnv* env,
-      const GURL& url) OVERRIDE;
+      const GURL& url) override;
 
-  virtual void OnInputStreamOpenFailed(net::URLRequest* request,
-                                       bool* restart) OVERRIDE;
+  void OnInputStreamOpenFailed(net::URLRequest* request,
+                               bool* restart) override;
 
-  virtual bool GetMimeType(JNIEnv* env,
-                           net::URLRequest* request,
-                           InputStream* stream,
-                           std::string* mime_type) OVERRIDE;
+  bool GetMimeType(JNIEnv* env,
+                   net::URLRequest* request,
+                   InputStream* stream,
+                   std::string* mime_type) override;
 
-  virtual bool GetCharset(JNIEnv* env,
-                          net::URLRequest* request,
-                          InputStream* stream,
-                          std::string* charset) OVERRIDE;
+  bool GetCharset(JNIEnv* env,
+                  net::URLRequest* request,
+                  InputStream* stream,
+                  std::string* charset) override;
 
-  virtual bool GetPackageName(JNIEnv* env,
-                              std::string* name) OVERRIDE;
+  bool GetPackageName(JNIEnv* env,
+                      std::string* name) override;
 
-  virtual ~AndroidStreamReaderURLRequestJobDelegateImpl();
+  ~AndroidStreamReaderURLRequestJobDelegateImpl() override;
 };
 
 class AndroidRequestInterceptorBase : public net::URLRequestInterceptor {
  public:
-  virtual net::URLRequestJob* MaybeInterceptRequest(
+  net::URLRequestJob* MaybeInterceptRequest(
       net::URLRequest* request,
-      net::NetworkDelegate* network_delegate) const OVERRIDE;
+      net::NetworkDelegate* network_delegate) const override;
 
   virtual bool ShouldHandleRequest(const net::URLRequest* request) const = 0;
 };
@@ -100,9 +100,9 @@ class AssetFileRequestInterceptor : public AndroidRequestInterceptorBase {
  public:
   AssetFileRequestInterceptor();
 
-  virtual ~AssetFileRequestInterceptor() OVERRIDE;
-  virtual bool ShouldHandleRequest(
-      const net::URLRequest* request) const OVERRIDE;
+  ~AssetFileRequestInterceptor() override;
+  bool ShouldHandleRequest(
+      const net::URLRequest* request) const override;
 
  private:
   // file:///android_asset/
@@ -115,16 +115,16 @@ class AssetFileRequestInterceptor : public AndroidRequestInterceptorBase {
 class AppSchemeRequestInterceptor : public AndroidRequestInterceptorBase {
  public:
   AppSchemeRequestInterceptor();
-    virtual bool ShouldHandleRequest(
-      const net::URLRequest* request) const OVERRIDE;
+  bool ShouldHandleRequest(
+      const net::URLRequest* request) const override;
 };
 
 // Protocol handler for content:// scheme requests.
 class ContentSchemeRequestInterceptor : public AndroidRequestInterceptorBase {
  public:
   ContentSchemeRequestInterceptor();
-  virtual bool ShouldHandleRequest(
-      const net::URLRequest* request) const OVERRIDE;
+  bool ShouldHandleRequest(
+      const net::URLRequest* request) const override;
 };
 
 static ScopedJavaLocalRef<jobject> GetResourceContext(JNIEnv* env) {
@@ -253,14 +253,14 @@ net::URLRequestJob* AndroidRequestInterceptorBase::MaybeInterceptRequest(
   scoped_ptr<AndroidStreamReaderURLRequestJobDelegateImpl> reader_delegate(
       new AndroidStreamReaderURLRequestJobDelegateImpl());
 
-  xwalk::RuntimeContext* runtime_context =
-      xwalk::XWalkRunner::GetInstance()->runtime_context();
-  std::string content_security_policy = runtime_context->GetCSPString();
+  xwalk::XWalkBrowserContext* browser_context =
+      xwalk::XWalkRunner::GetInstance()->browser_context();
+  std::string content_security_policy = browser_context->GetCSPString();
 
   return new AndroidStreamReaderURLRequestJob(
       request,
       network_delegate,
-      reader_delegate.PassAs<AndroidStreamReaderURLRequestJob::Delegate>(),
+      reader_delegate.Pass(),
       content_security_policy);
 }
 

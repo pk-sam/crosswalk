@@ -3,8 +3,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/file_util.h"
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "xwalk/runtime/browser/runtime.h"
@@ -39,10 +39,15 @@ static DownloadManagerImpl* DownloadManagerForXWalk(Runtime* runtime) {
 
 class XWalkDownloadBrowserTest : public InProcessBrowserTest {
  public:
-  virtual void SetUpOnMainThread() OVERRIDE {
-    ASSERT_TRUE(downloads_directory_.CreateUniqueTempDir());
+  XWalkDownloadBrowserTest()
+    : InProcessBrowserTest(),
+      runtime_(nullptr) {}
 
-    DownloadManagerImpl* manager = DownloadManagerForXWalk(runtime());
+  void SetUpOnMainThread() override {
+    ASSERT_TRUE(downloads_directory_.CreateUniqueTempDir());
+    runtime_ = CreateRuntime(GURL());
+
+    DownloadManagerImpl* manager = DownloadManagerForXWalk(runtime_);
     RuntimeDownloadManagerDelegate* delegate =
         static_cast<RuntimeDownloadManagerDelegate*>(manager->GetDelegate());
     delegate->SetDownloadBehaviorForTesting(downloads_directory_.path());
@@ -56,6 +61,9 @@ class XWalkDownloadBrowserTest : public InProcessBrowserTest {
         DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_FAIL);
   }
 
+ protected:
+  Runtime* runtime_;
+
  private:
   // Location of the downloads directory for these tests
   base::ScopedTempDir downloads_directory_;
@@ -65,12 +73,12 @@ IN_PROC_BROWSER_TEST_F(XWalkDownloadBrowserTest, FileDownload) {
   GURL url = xwalk_test_utils::GetTestURL(
       base::FilePath().AppendASCII("download"),
       base::FilePath().AppendASCII("test.lib"));
-  scoped_ptr<DownloadTestObserver> observer(CreateWaiter(runtime(), 1));
-  xwalk_test_utils::NavigateToURL(runtime(), url);
+  scoped_ptr<DownloadTestObserver> observer(CreateWaiter(runtime_, 1));
+  xwalk_test_utils::NavigateToURL(runtime_, url);
   observer->WaitForFinished();
   EXPECT_EQ(1u, observer->NumDownloadsSeenInState(DownloadItem::COMPLETE));
   std::vector<DownloadItem*> downloads;
-  DownloadManagerForXWalk(runtime())->GetAllDownloads(&downloads);
+  DownloadManagerForXWalk(runtime_)->GetAllDownloads(&downloads);
   ASSERT_EQ(1u, downloads.size());
   ASSERT_EQ(DownloadItem::COMPLETE, downloads[0]->GetState());
   base::FilePath file(downloads[0]->GetFullPath());

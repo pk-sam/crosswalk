@@ -23,11 +23,11 @@ using extensions::XWalkExtensionInstance;
 
 class DeviceCapabilitiesExtension : public XWalkExtension {
  public:
-  explicit DeviceCapabilitiesExtension();
-  virtual ~DeviceCapabilitiesExtension();
+  DeviceCapabilitiesExtension();
+  ~DeviceCapabilitiesExtension() override;
 
   // XWalkExtension implementation.
-  virtual XWalkExtensionInstance* CreateInstance() OVERRIDE;
+  XWalkExtensionInstance* CreateInstance() override;
 };
 
 class DeviceCapabilitiesInstance : public XWalkExtensionInstance {
@@ -35,7 +35,7 @@ class DeviceCapabilitiesInstance : public XWalkExtensionInstance {
   DeviceCapabilitiesInstance();
 
   // XWalkExtensionInstance implementation.
-  virtual void HandleMessage(scoped_ptr<base::Value> msg) OVERRIDE;
+  void HandleMessage(scoped_ptr<base::Value> msg) override;
 
  private:
   void OnDeviceCapabilitiesConstructor(

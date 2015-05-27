@@ -17,10 +17,10 @@ class XWalkRenderViewExtTizen : public content::RenderViewObserver {
 
  private:
   explicit XWalkRenderViewExtTizen(content::RenderView* render_view);
-  virtual ~XWalkRenderViewExtTizen();
+  ~XWalkRenderViewExtTizen() override;
 
   // RenderView::Observer:
-  virtual bool OnMessageReceived(const IPC::Message& message) OVERRIDE;
+  bool OnMessageReceived(const IPC::Message& message) override;
 
   void OnHWKeyPressed(int keycode);
 

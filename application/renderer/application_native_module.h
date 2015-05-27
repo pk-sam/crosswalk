@@ -13,10 +13,10 @@ namespace application {
 class ApplicationNativeModule : public xwalk::extensions::XWalkNativeModule {
  public:
   ApplicationNativeModule();
-  virtual ~ApplicationNativeModule();
+  ~ApplicationNativeModule() override;
 
  private:
-  virtual v8::Handle<v8::Object> NewInstance() OVERRIDE;
+  v8::Handle<v8::Object> NewInstance() override;
 
   // Return main frame window object according to the routing id.
   static void GetViewByIDCallback(const v8::FunctionCallbackInfo<v8::Value>&);

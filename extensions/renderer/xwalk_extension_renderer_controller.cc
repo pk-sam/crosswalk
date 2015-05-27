@@ -6,14 +6,14 @@
 
 #include "base/command_line.h"
 #include "base/values.h"
+#include "content/public/child/v8_value_converter.h"
 #include "content/public/renderer/render_thread.h"
-#include "content/public/renderer/v8_value_converter.h"
 #include "grit/xwalk_extensions_resources.h"
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sync_channel.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebFrame.h"
+#include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebScopedMicrotaskSuppression.h"
 #include "v8/include/v8.h"
 #include "xwalk/extensions/common/xwalk_extension_messages.h"
@@ -42,7 +42,7 @@ XWalkExtensionRendererController::XWalkExtensionRendererController(
   IPC::SyncChannel* browser_channel = thread->GetChannel();
   SetupBrowserProcessClient(browser_channel);
 
-  CommandLine* cmd_line = CommandLine::ForCurrentProcess();
+  base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
   if (cmd_line->HasSwitch(switches::kXWalkDisableExtensionProcess))
     LOG(INFO) << "EXTENSION PROCESS DISABLED.";
   else
@@ -95,7 +95,7 @@ void CreateExtensionModulesWithoutDeviceAPI(XWalkExtensionClient* client,
 }  // namespace
 
 void XWalkExtensionRendererController::DidCreateScriptContext(
-    blink::WebFrame* frame, v8::Handle<v8::Context> context) {
+    blink::WebLocalFrame* frame, v8::Handle<v8::Context> context) {
   XWalkModuleSystem* module_system = new XWalkModuleSystem(context);
   XWalkModuleSystem::SetModuleSystemInContext(
       scoped_ptr<XWalkModuleSystem>(module_system), context);

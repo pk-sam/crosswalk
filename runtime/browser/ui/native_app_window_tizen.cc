@@ -7,9 +7,9 @@
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
 #include "ui/aura/window.h"
-#include "ui/gfx/transform.h"
-#include "ui/gfx/rect.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/screen.h"
+#include "ui/gfx/transform.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 #include "xwalk/runtime/browser/ui/splash_screen_tizen.h"
@@ -41,7 +41,7 @@ static gfx::Display::Rotation ToDisplayRotation(gfx::Display display,
 
   if (display.bounds().width() > display.bounds().height()) {
     // Landscape devices have landscape-primary as default.
-    rot = static_cast<gfx::Display::Rotation>((rot - 1) % 4);
+    rot = static_cast<gfx::Display::Rotation>((rot + 3) % 4);
   }
 
   return rot;
@@ -121,6 +121,9 @@ void NativeAppWindowTizen::Initialize() {
     OnScreenOrientationChanged(
         SensorProvider::GetInstance()->GetScreenOrientation());
   }
+
+  // Allow CSS animations to stop/play according to VisibilityChange event.
+  GetWidget()->SetVisibilityChangedAnimationsEnabled(true);
 }
 
 NativeAppWindowTizen::~NativeAppWindowTizen() {

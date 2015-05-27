@@ -20,7 +20,7 @@ using jsapi::device_capabilities::SystemDisplay;
 class DisplayInfoProvider : public gfx::DisplayObserver {
  public:
   DisplayInfoProvider();
-  virtual ~DisplayInfoProvider();
+  ~DisplayInfoProvider() override;
 
   static scoped_ptr<SystemDisplay> display_info();
 
@@ -42,10 +42,10 @@ class DisplayInfoProvider : public gfx::DisplayObserver {
   void StopDisplayMonitoring();
 
   // gfx::DisplayObserver implementation.
-  virtual void OnDisplayMetricsChanged(const gfx::Display& display,
-                                       uint32_t metrics) OVERRIDE {}
-  virtual void OnDisplayAdded(const gfx::Display& display) OVERRIDE;
-  virtual void OnDisplayRemoved(const gfx::Display& display) OVERRIDE;
+  void OnDisplayMetricsChanged(const gfx::Display& display,
+                                       uint32_t metrics) override {}
+  void OnDisplayAdded(const gfx::Display& display) override;
+  void OnDisplayRemoved(const gfx::Display& display) override;
 
   ObserverList<Observer> observer_list_;
 

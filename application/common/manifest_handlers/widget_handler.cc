@@ -125,8 +125,12 @@ bool WidgetHandler::Parse(scoped_refptr<ApplicationData> application,
 
   for (KeyMapIterator iter = map.begin(); iter != map.end(); ++iter) {
     std::string string;
-    manifest->GetString(iter->first, &string);
-    widget_info->SetString(iter->second, string);
+    bool result = manifest->GetString(iter->first, &string);
+    if (result && !string.empty() && iter->first == keys::kAuthorHrefKey &&
+        !GURL(string).is_valid())
+      // When authorhref is an invalid URI, reset it an empty string.
+      string.clear();
+    widget_info->SetString(iter->second, result ? string : "");
   }
 
   base::Value* pref_value = NULL;
@@ -156,6 +160,23 @@ bool WidgetHandler::Parse(scoped_refptr<ApplicationData> application,
   }
 
   application->SetManifestData(keys::kWidgetKey, widget_info.release());
+  return true;
+}
+
+bool WidgetHandler::Validate(
+    scoped_refptr<const ApplicationData> application,
+    std::string* error) const {
+  const Manifest* manifest = application->GetManifest();
+  DCHECK(manifest);
+  std::string ns_value;
+  if (!manifest->GetString(keys::kWidgetNamespaceKey, &ns_value)) {
+    *error = std::string("Failed to retrieve the widget's namespace.");
+    return false;
+  }
+  if (base::strcasecmp(keys::kWidgetNamespacePrefix, ns_value.c_str()) != 0) {
+    *error = std::string("The widget namespace is invalid.");
+    return false;
+  }
   return true;
 }
 

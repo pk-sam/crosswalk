@@ -5,7 +5,7 @@
 #include "xwalk/runtime/browser/runtime_platform_util.h"
 
 #include "base/bind.h"
-#include "base/file_util.h"
+#include "base/files/file_util.h"
 #include "base/process/kill.h"
 #include "base/process/launch.h"
 #include "base/strings/utf_string_conversions.h"
@@ -21,6 +21,7 @@ void XDGUtil(const std::string& util, const std::string& arg) {
   argv.push_back(util);
   argv.push_back(arg);
   base::LaunchOptions options;
+  options.allow_new_privs = true;
 
   // xdg-open can fall back on mailcap which eventually might plumb through
   // to a command that needs a terminal.  Set the environment variable telling
@@ -37,9 +38,9 @@ void XDGUtil(const std::string& util, const std::string& arg) {
     options.environ["GNOME_DISABLE_CRASH_DIALOG"] = "";
   }
 
-  base::ProcessHandle handle;
-  if (base::LaunchProcess(argv, options, &handle))
-    base::EnsureProcessGetsReaped(handle);
+  base::Process process = base::LaunchProcess(argv, options);
+  if (process.IsValid())
+    base::EnsureProcessGetsReaped(process.Handle());
 }
 
 void XDGOpen(const std::string& path) {

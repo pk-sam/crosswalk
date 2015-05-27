@@ -39,14 +39,14 @@ class RuntimeURLRequestContextGetter : public net::URLRequestContextGetter {
       content::URLRequestInterceptorScopedVector request_interceptors);
 
   // net::URLRequestContextGetter implementation.
-  virtual net::URLRequestContext* GetURLRequestContext() OVERRIDE;
-  virtual scoped_refptr<base::SingleThreadTaskRunner>
-      GetNetworkTaskRunner() const OVERRIDE;
+  net::URLRequestContext* GetURLRequestContext() override;
+  scoped_refptr<base::SingleThreadTaskRunner>
+      GetNetworkTaskRunner() const override;
 
   net::HostResolver* host_resolver();
 
  private:
-  virtual ~RuntimeURLRequestContextGetter();
+  ~RuntimeURLRequestContextGetter() override;
 
   bool ignore_certificate_errors_;
   base::FilePath base_path_;

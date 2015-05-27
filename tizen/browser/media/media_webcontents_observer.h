@@ -15,7 +15,6 @@
 namespace tizen {
 
 class BrowserMediaPlayerManager;
-class RenderViewHost;
 
 // This class manages all RenderFrame based media related managers at the
 // browser side. It receives IPC messages from media RenderFrameObservers and
@@ -24,14 +23,14 @@ class RenderViewHost;
 class CONTENT_EXPORT MediaWebContentsObserver :
     public content::WebContentsObserver {
  public:
-  explicit MediaWebContentsObserver(content::RenderViewHost* render_view_host);
-  virtual ~MediaWebContentsObserver();
+  explicit MediaWebContentsObserver(content::WebContents* web_contents);
+  ~MediaWebContentsObserver() override;
 
   // WebContentsObserver implementations.
-  virtual void RenderFrameDeleted(
-      content::RenderFrameHost* render_frame_host) OVERRIDE;
-  virtual bool OnMessageReceived(const IPC::Message& message,
-      content::RenderFrameHost* render_frame_host) OVERRIDE;
+  void RenderFrameDeleted(
+      content::RenderFrameHost* render_frame_host) override;
+  bool OnMessageReceived(const IPC::Message& message,
+      content::RenderFrameHost* render_frame_host) override;
 
   // Gets the media player manager associated with |render_frame_host|. Creates
   // a new one if it doesn't exist. The caller doesn't own the returned pointer.

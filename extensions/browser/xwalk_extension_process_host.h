@@ -55,10 +55,10 @@ class XWalkExtensionProcessHost
                             const base::FilePath& external_extensions_path,
                             XWalkExtensionProcessHost::Delegate* delegate,
                             scoped_ptr<base::ValueMap> runtime_variables);
-  virtual ~XWalkExtensionProcessHost();
+  ~XWalkExtensionProcessHost() override;
 
   // IPC::Sender implementation
-  virtual bool Send(IPC::Message* msg) OVERRIDE;
+  bool Send(IPC::Message* msg) override;
 
  private:
   class RenderProcessMessageFilter;
@@ -71,9 +71,9 @@ class XWalkExtensionProcessHost
   void OnGetExtensionProcessChannel(scoped_ptr<IPC::Message> reply);
 
   // content::BrowserChildProcessHostDelegate implementation.
-  virtual bool OnMessageReceived(const IPC::Message& message) OVERRIDE;
-  virtual void OnChannelError() OVERRIDE;
-  virtual void OnProcessLaunched() OVERRIDE;
+  bool OnMessageReceived(const IPC::Message& message) override;
+  void OnChannelError() override;
+  void OnProcessLaunched() override;
 
   // Message Handlers.
   void OnRenderChannelCreated(const IPC::ChannelHandle& channel_id);

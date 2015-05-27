@@ -15,12 +15,12 @@ namespace xwalk {
 class XWalkWebContentsViewDelegate : public content::WebContentsViewDelegate {
  public:
   explicit XWalkWebContentsViewDelegate(content::WebContents* web_contents);
-  virtual ~XWalkWebContentsViewDelegate();
+  ~XWalkWebContentsViewDelegate() override;
 
   // Overridden from WebContentsViewDelegate:
-  virtual void ShowContextMenu(content::RenderFrameHost* render_frame_host,
-      const content::ContextMenuParams& params) OVERRIDE;
-  virtual content::WebDragDestDelegate* GetDragDestDelegate() OVERRIDE;
+  void ShowContextMenu(content::RenderFrameHost* render_frame_host,
+      const content::ContextMenuParams& params) override;
+  content::WebDragDestDelegate* GetDragDestDelegate() override;
 
  private:
   content::WebContents* web_contents_;

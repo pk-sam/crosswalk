@@ -25,6 +25,7 @@ import org.chromium.content.browser.test.util.TestCallbackHelperContainer.OnPage
 import org.chromium.content.browser.test.util.TestCallbackHelperContainer.OnPageStartedHelper;
 import org.chromium.content.browser.test.util.TestCallbackHelperContainer.OnReceivedErrorHelper;
 
+import org.xwalk.core.XWalkUIClient.ConsoleMessageType;
 import org.xwalk.core.XWalkUIClient.LoadStatus;
 import org.xwalk.core.XWalkView;
 
@@ -71,6 +72,20 @@ class TestHelperBridge {
     }
 
     public class OnLoadStartedHelper extends CallbackHelper {
+        private String mUrl;
+
+        public String getUrl() {
+            assert getCallCount() > 0;
+            return mUrl;
+        }
+
+        public void notifyCalled(String url) {
+            mUrl = url;
+            notifyCalled();
+        }
+    }
+
+    public class OnLoadFinishedHelper extends CallbackHelper {
         private String mUrl;
 
         public String getUrl() {
@@ -294,6 +309,32 @@ class TestHelperBridge {
         }
     }
 
+    public class OnConsoleMessageHelper extends CallbackHelper {
+        private String mMessage;
+        private int mLineNumber;
+        private String mSourceId;
+        private ConsoleMessageType mMessageType;
+
+        public String getMessage() {
+            assert getCallCount() > 0;
+            return mMessage;
+        }
+
+        public ConsoleMessageType getMessageType() {
+            assert getCallCount() > 0;
+            return mMessageType;
+        }
+
+        public void notifyCalled(String message,
+                int lineNumber, String sourceId, ConsoleMessageType messageType) {
+            mMessage = message;
+            mLineNumber = lineNumber;
+            mSourceId = sourceId;
+            mMessageType = messageType;
+            notifyCalled();
+        }
+    }
+
     public class OnReceivedIconHelper extends CallbackHelper {
         private Bitmap mIcon;
 
@@ -304,6 +345,49 @@ class TestHelperBridge {
 
         public void notifyCalled(Bitmap icon) {
             mIcon = icon;
+            notifyCalled();
+        }
+    }
+
+    public class OnDownloadStartHelper extends CallbackHelper {
+        private String mUrl;
+        private String mUserAgent;
+        private String mContentDisposition;
+        private String mMimeType;
+        long mContentLength;
+
+        public String getUrl() {
+            assert getCallCount() > 0;
+            return mUrl;
+        }
+
+        public String getUserAgent() {
+            assert getCallCount() > 0;
+            return mUserAgent;
+        }
+
+        public String getContentDisposition() {
+            assert getCallCount() > 0;
+            return mContentDisposition;
+        }
+
+        public String getMimeType() {
+            assert getCallCount() > 0;
+            return mMimeType;
+        }
+
+        public long getContentLength() {
+            assert getCallCount() > 0;
+            return mContentLength;
+        }
+
+        public void notifyCalled(String url, String userAgent, String contentDisposition,
+                String mimeType, long contentLength) {
+            mUrl = url;
+            mUserAgent = userAgent;
+            mContentDisposition = contentDisposition;
+            mMimeType = mimeType;
+            mContentLength = contentLength;
             notifyCalled();
         }
     }
@@ -329,7 +413,10 @@ class TestHelperBridge {
     private final OnFullscreenToggledHelper mOnFullscreenToggledHelper;
     private final OverrideOrUnhandledKeyEventHelper mOverrideOrUnhandledKeyEventHelper;
     private final OnCreateWindowRequestedHelper mOnCreateWindowRequestedHelper;
+    private final OnConsoleMessageHelper mOnConsoleMessageHelper;
     private final OnReceivedIconHelper mOnReceivedIconHelper;
+    private final OnLoadFinishedHelper mOnLoadFinishedHelper;
+    private final OnDownloadStartHelper mOnDownloadStartHelper;
 
     public TestHelperBridge() {
         mOnPageStartedHelper = new OnPageStartedHelper();
@@ -349,7 +436,10 @@ class TestHelperBridge {
         mOnFullscreenToggledHelper = new OnFullscreenToggledHelper();
         mOverrideOrUnhandledKeyEventHelper = new OverrideOrUnhandledKeyEventHelper();
         mOnCreateWindowRequestedHelper = new OnCreateWindowRequestedHelper();
+        mOnConsoleMessageHelper = new OnConsoleMessageHelper();
         mOnReceivedIconHelper = new OnReceivedIconHelper();
+        mOnLoadFinishedHelper = new OnLoadFinishedHelper();
+        mOnDownloadStartHelper = new OnDownloadStartHelper();
     }
 
     public OnPageStartedHelper getOnPageStartedHelper() {
@@ -378,6 +468,10 @@ class TestHelperBridge {
 
     public OnLoadStartedHelper getOnLoadStartedHelper() {
         return mOnLoadStartedHelper;
+    }
+
+    public OnLoadFinishedHelper getOnLoadFinishedHelper() {
+        return mOnLoadFinishedHelper;
     }
 
     public OnJavascriptCloseWindowHelper getOnJavascriptCloseWindowHelper() {
@@ -420,8 +514,16 @@ class TestHelperBridge {
         return mOnCreateWindowRequestedHelper;
     }
 
+    public OnConsoleMessageHelper getOnConsoleMessageHelper() {
+        return mOnConsoleMessageHelper;
+    }
+
     public OnReceivedIconHelper getOnReceivedIconHelper() {
         return mOnReceivedIconHelper;
+    }
+
+    public OnDownloadStartHelper getOnDownloadStartHelper() {
+        return mOnDownloadStartHelper;
     }
 
     public void onTitleChanged(String title) {
@@ -460,6 +562,10 @@ class TestHelperBridge {
         mOnLoadStartedHelper.notifyCalled(url);
     }
 
+    public void onLoadFinished(String url) {
+        mOnLoadFinishedHelper.notifyCalled(url);
+    }
+
     public void onJavascriptCloseWindow() {
         mOnJavascriptCloseWindowHelper.notifyCalled(true);
     }
@@ -488,6 +594,12 @@ class TestHelperBridge {
         return true;
     }
 
+    public boolean onConsoleMessage(String message, int lineNumber,
+            String sourceId, ConsoleMessageType messageType) {
+        mOnConsoleMessageHelper.notifyCalled(message, lineNumber, sourceId, messageType);
+        return true;
+    }
+
     public void openFileChooser(ValueCallback<Uri> uploadFile) {
         mOpenFileChooserHelper.notifyCalled(uploadFile);
     }
@@ -499,5 +611,11 @@ class TestHelperBridge {
     public boolean overrideOrUnhandledKeyEvent(KeyEvent event) {
         mOverrideOrUnhandledKeyEventHelper.notifyCalled(event);
         return true;
+    }
+
+    public void onDownloadStart(String url, String userAgent,
+            String contentDisposition, String mimetype, long contentLength) {
+        mOnDownloadStartHelper.notifyCalled(url, userAgent, contentDisposition,
+                mimetype, contentLength);
     }
 }

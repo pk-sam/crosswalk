@@ -9,7 +9,8 @@
 #include "base/android/path_utils.h"
 #include "base/base_paths_android.h"
 #include "base/files/file_path.h"
-#include "base/file_util.h"
+#include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/threading/sequenced_worker_pool.h"
@@ -33,7 +34,6 @@
 #include "xwalk/extensions/common/xwalk_extension.h"
 #include "xwalk/extensions/common/xwalk_extension_switches.h"
 #include "xwalk/runtime/browser/android/cookie_manager.h"
-#include "xwalk/runtime/browser/runtime_context.h"
 #include "xwalk/runtime/browser/xwalk_runner.h"
 #include "xwalk/runtime/common/xwalk_runtime_features.h"
 #include "xwalk/runtime/common/xwalk_switches.h"
@@ -48,6 +48,32 @@ base::StringPiece PlatformResourceProvider(int key) {
     return html_data;
   }
   return base::StringPiece();
+}
+
+void MoveUserDataDirIfNecessary(const base::FilePath& user_data_dir,
+                                const base::FilePath& profile) {
+  if (base::DirectoryExists(profile))
+    return;
+
+  if (!base::CreateDirectory(profile))
+    return;
+
+  const char* possible_data_dir_names[] = {
+      "Cache",
+      "Cookies",
+      "Cookies-journal",
+      "IndexedDB",
+      "Local Storage",
+  };
+  for (size_t i = 0; i < arraysize(possible_data_dir_names); i++) {
+    base::FilePath dir = user_data_dir.Append(possible_data_dir_names[i]);
+    if (base::PathExists(dir)) {
+      if (!base::Move(dir, profile.Append(possible_data_dir_names[i]))) {
+        NOTREACHED() << "Failed to import previous user data: "
+                     << possible_data_dir_names[i];
+      }
+    }
+  }
 }
 
 }  // namespace
@@ -73,9 +99,6 @@ void XWalkBrowserMainPartsAndroid::PreEarlyInitialization() {
   // Android. So increase the limit to 4096 explicitly.
   base::SetFdLimit(4096);
 
-  CommandLine::ForCurrentProcess()->AppendSwitch(
-      cc::switches::kCompositeToMailbox);
-
   // Initialize the Compositor.
   content::Compositor::Initialize();
 
@@ -83,7 +106,7 @@ void XWalkBrowserMainPartsAndroid::PreEarlyInitialization() {
 }
 
 void XWalkBrowserMainPartsAndroid::PreMainMessageLoopStart() {
-  CommandLine* command_line = CommandLine::ForCurrentProcess();
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   // Disable ExtensionProcess for Android.
   // External extensions will run in the BrowserProcess (in process mode).
   command_line->AppendSwitch(switches::kXWalkDisableExtensionProcess);
@@ -91,7 +114,7 @@ void XWalkBrowserMainPartsAndroid::PreMainMessageLoopStart() {
   // Only force to enable WebGL for Android for IA platforms because
   // we've tested the WebGL conformance test. For other platforms, just
   // follow up the behavior defined by Chromium upstream.
-#if defined(ARCH_CPU_X86)
+#if defined(ARCH_CPU_X86) || defined(ARCH_CPU_X86_64)
   command_line->AppendSwitch(switches::kIgnoreGpuBlacklist);
 #endif
 
@@ -132,10 +155,13 @@ void XWalkBrowserMainPartsAndroid::PreMainMessageLoopRun() {
   if (!PathService::Get(base::DIR_ANDROID_APP_DATA, &user_data_dir)) {
     NOTREACHED() << "Failed to get app data directory for Crosswalk";
   }
-  CommandLine* command_line = CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kXWalkProfileName))
-    user_data_dir = user_data_dir.Append(
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(switches::kXWalkProfileName)) {
+    base::FilePath profile = user_data_dir.Append(
         command_line->GetSwitchValuePath(switches::kXWalkProfileName));
+    MoveUserDataDirIfNecessary(user_data_dir, profile);
+    user_data_dir = profile;
+  }
 
   base::FilePath cookie_store_path = user_data_dir.Append(
       FILE_PATH_LITERAL("Cookies"));

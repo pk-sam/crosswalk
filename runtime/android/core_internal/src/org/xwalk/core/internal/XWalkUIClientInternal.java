@@ -40,6 +40,7 @@ public class XWalkUIClientInternal {
     private XWalkViewInternal mXWalkView;
     private boolean mOriginalFullscreen;
     private boolean mOriginalForceNotFullscreen;
+    private boolean mIsFullscreen = false;
 
     /**
      * Initiator
@@ -199,23 +200,26 @@ public class XWalkUIClientInternal {
             } else {
                 mOriginalForceNotFullscreen = false;
             }
-            if (VERSION.SDK_INT >= VERSION_CODES.KITKAT) {
-                mSystemUiFlag = mDecorView.getSystemUiVisibility();
-                mDecorView.setSystemUiVisibility(
-                        View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
-                        View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
-                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
-                        View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
-                        View.SYSTEM_UI_FLAG_FULLSCREEN |
-                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
-            } else {
-                if ((activity.getWindow().getAttributes().flags &
-                        WindowManager.LayoutParams.FLAG_FULLSCREEN) != 0) {
-                    mOriginalFullscreen = true;
+            if (!mIsFullscreen) {
+                if (VERSION.SDK_INT >= VERSION_CODES.KITKAT) {
+                    mSystemUiFlag = mDecorView.getSystemUiVisibility();
+                    mDecorView.setSystemUiVisibility(
+                            View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+                            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+                            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+                            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+                            View.SYSTEM_UI_FLAG_FULLSCREEN |
+                            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
                 } else {
-                    mOriginalFullscreen = false;
-                    activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+                    if ((activity.getWindow().getAttributes().flags &
+                            WindowManager.LayoutParams.FLAG_FULLSCREEN) != 0) {
+                        mOriginalFullscreen = true;
+                    } else {
+                        mOriginalFullscreen = false;
+                        activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+                    }
                 }
+                mIsFullscreen = true;
             }
         } else {
             if (mOriginalForceNotFullscreen) {
@@ -230,6 +234,7 @@ public class XWalkUIClientInternal {
                     activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
                 }
             }
+            mIsFullscreen = false;
         }
     }
 
@@ -295,6 +300,35 @@ public class XWalkUIClientInternal {
      */
     @XWalkAPI
     public void onUnhandledKeyEvent(XWalkViewInternal view, KeyEvent event) {
+    }
+
+    /**
+     * Initiator
+     * @since 5.0
+     */
+    @XWalkAPI
+    public enum ConsoleMessageType {
+        DEBUG,
+        ERROR,
+        LOG,
+        INFO,
+        WARNING
+    }
+
+    /**
+     * Notify the host application of console message.
+     * @param view The XWalkViewInternal that initiated the callback.
+     * @param message A String containing the console message.
+     * @param lineNumber The line number of JavaScript.
+     * @param sourceId The link which print log.
+     * @param messageType The type of console message.
+     * @return Not applicable here. For future use.
+     * @since 5.0
+     */
+    @XWalkAPI
+    public boolean onConsoleMessage(XWalkViewInternal view, String message,
+            int lineNumber, String sourceId, ConsoleMessageType messageType) {
+        return false;
     }
 
     /**

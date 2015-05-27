@@ -27,14 +27,14 @@ class XWalkExternalInstance : public XWalkExtensionInstance {
  public:
   XWalkExternalInstance(XWalkExternalExtension* extension,
                         XW_Instance xw_instance);
-  virtual ~XWalkExternalInstance();
+  ~XWalkExternalInstance() override;
 
  private:
   friend class XWalkExternalAdapter;
 
   // XWalkExtensionInstance implementation.
-  virtual void HandleMessage(scoped_ptr<base::Value> msg) OVERRIDE;
-  virtual void HandleSyncMessage(scoped_ptr<base::Value> msg) OVERRIDE;
+  void HandleMessage(scoped_ptr<base::Value> msg) override;
+  void HandleSyncMessage(scoped_ptr<base::Value> msg) override;
 
   // XW_CoreInterface_1 (from XW_Extension.h) implementation.
   void CoreSetInstanceData(void* data);

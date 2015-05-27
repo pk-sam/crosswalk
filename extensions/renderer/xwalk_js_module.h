@@ -21,11 +21,11 @@ scoped_ptr<XWalkNativeModule> CreateJSModuleFromResource(int resource_id);
 class XWalkJSModule : public XWalkNativeModule {
  public:
   explicit XWalkJSModule(const std::string& js_code);
-  virtual ~XWalkJSModule();
+  ~XWalkJSModule() override;
 
  private:
   // XWalkNativeModule implementation.
-  virtual v8::Handle<v8::Object> NewInstance() OVERRIDE;
+  v8::Handle<v8::Object> NewInstance() override;
 
   bool Compile(v8::Isolate* isolate, std::string* error);
 

@@ -23,10 +23,10 @@ class RendererMediaPlayerManager : public content::RenderFrameObserver {
  public:
   // Constructs a RendererMediaPlayerManager object for the |render_view|.
   explicit RendererMediaPlayerManager(content::RenderFrame* render_frame);
-  virtual ~RendererMediaPlayerManager();
+  ~RendererMediaPlayerManager() override;
 
   // RenderViewObserver overrides.
-  virtual bool OnMessageReceived(const IPC::Message& msg) OVERRIDE;
+  bool OnMessageReceived(const IPC::Message& msg) override;
 
   // Initializes a BrowserMediaPlayerManager object in browser process.
   void Initialize(MediaPlayerID player_id,
@@ -36,7 +36,7 @@ class RendererMediaPlayerManager : public content::RenderFrameObserver {
   // Starts the player.
   void Start(MediaPlayerID player_id);
 
-  // Pausees the player.
+  // Pauses the player.
   void Pause(MediaPlayerID player_id);
 
   // Destroy the player in the browser process

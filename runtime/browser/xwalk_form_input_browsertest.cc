@@ -33,14 +33,14 @@ class TestSelectFileDialog : public ui::SelectFileDialog {
       ui::SelectFilePolicy* policy) {
     return new TestSelectFileDialog(listener, policy);
   }
-  virtual bool IsRunning(gfx::NativeWindow owning_window) const OVERRIDE {
+  bool IsRunning(gfx::NativeWindow owning_window) const override {
     return false;
   }
-  virtual void ListenerDestroyed() OVERRIDE {}
+  void ListenerDestroyed() override {}
 
  protected:
-  virtual ~TestSelectFileDialog() {}
-  virtual void SelectFileImpl(
+  ~TestSelectFileDialog() override {}
+  void SelectFileImpl(
       Type type,
       const base::string16& title,
       const base::FilePath& default_path,
@@ -48,12 +48,12 @@ class TestSelectFileDialog : public ui::SelectFileDialog {
       int file_type_index,
       const base::FilePath::StringType& default_extension,
       gfx::NativeWindow owning_window,
-      void* params) OVERRIDE {
+      void* params) override {
     listener_->FileSelected(g_file_selected_path, 1, NULL);
   }
 
  private:
-  virtual bool HasMultipleFileTypeChoicesImpl() OVERRIDE {
+  bool HasMultipleFileTypeChoicesImpl() override {
     return false;
   }
   TestSelectFileDialog(Listener* listener, ui::SelectFilePolicy* policy) :
@@ -65,9 +65,9 @@ class TestSelectFileDialog : public ui::SelectFileDialog {
 
 class TestSelectFileDialogFactory : public ui::SelectFileDialogFactory {
  public:
-  virtual ui::SelectFileDialog* Create(
+  ui::SelectFileDialog* Create(
       ui::SelectFileDialog::Listener* listener,
-      ui::SelectFilePolicy* policy) OVERRIDE {
+      ui::SelectFilePolicy* policy) override {
     return TestSelectFileDialog::Create(listener, policy);
   }
 };
@@ -80,7 +80,7 @@ class XWalkFormInputTest : public InProcessBrowserTest {
     ui::SelectFileDialog::SetFactory(&factory_);
   }
 
-  virtual ~XWalkFormInputTest() {
+  ~XWalkFormInputTest() override {
   }
 
   void SetBrowserTestColor(unsigned int r, unsigned int g, unsigned int b) {
@@ -100,16 +100,16 @@ IN_PROC_BROWSER_TEST_F(XWalkFormInputTest, DISABLED_FileSelector) {
       base::FilePath(), base::FilePath().AppendASCII("file_to_select")));
   GURL url = xwalk_test_utils::GetTestURL(
       base::FilePath(), base::FilePath().AppendASCII("form_input.html"));
-  xwalk_test_utils::NavigateToURL(runtime(), url);
-  content::WaitForLoadStop(runtime()->web_contents());
+  Runtime* runtime = CreateRuntime(url);
+  content::WaitForLoadStop(runtime->web_contents());
   bool ret = content::ExecuteScript(
-      runtime()->web_contents(), "doSelectFile();");
+      runtime->web_contents(), "doSelectFile();");
   EXPECT_TRUE(ret);
   content::RunAllPendingInMessageLoop();
   base::string16 expected_title = base::ASCIIToUTF16("file selected: ");
   expected_title.append(
       base::ASCIIToUTF16(g_file_selected_path.BaseName().MaybeAsASCII()));
-  content::TitleWatcher title_watcher(runtime()->web_contents(),
+  content::TitleWatcher title_watcher(runtime->web_contents(),
                                       expected_title);
   EXPECT_EQ(title_watcher.WaitAndGetTitle(), expected_title);
 }
@@ -119,17 +119,17 @@ IN_PROC_BROWSER_TEST_F(XWalkFormInputTest, ColorChooser) {
   SetBrowserTestColor(r, g, b);
   GURL url = xwalk_test_utils::GetTestURL(
       base::FilePath(), base::FilePath().AppendASCII("form_input.html"));
-  xwalk_test_utils::NavigateToURL(runtime(), url);
-  content::WaitForLoadStop(runtime()->web_contents());
+  Runtime* runtime = CreateRuntime(url);
+  content::WaitForLoadStop(runtime->web_contents());
   bool ret = content::ExecuteScript(
-      runtime()->web_contents(), "doChooseColor();");
+      runtime->web_contents(), "doChooseColor();");
   EXPECT_TRUE(ret);
   content::RunAllPendingInMessageLoop();
   base::string16 expected_title = base::ASCIIToUTF16("color chosen: ");
   char rgb[8];
   base::snprintf(rgb, sizeof(rgb), "#%02x%02x%02x", r, g, b);
   expected_title.append(base::ASCIIToUTF16(rgb));
-  content::TitleWatcher title_watcher(runtime()->web_contents(),
+  content::TitleWatcher title_watcher(runtime->web_contents(),
                                       expected_title);
   EXPECT_EQ(title_watcher.WaitAndGetTitle(), expected_title);
 }

@@ -14,7 +14,7 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/file_util.h"
+#include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -103,8 +103,11 @@ void RuntimeDownloadManagerDelegate::GenerateFilename(
     const base::FilePath& generated_name,
     const base::FilePath& suggested_directory) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::FILE));
-  if (!base::PathExists(suggested_directory))
-    base::CreateDirectory(suggested_directory);
+  if (!base::CreateDirectory(suggested_directory)) {
+    LOG(ERROR) << "Failed to create directory: "
+               << suggested_directory.value();
+    return;
+  }
 
   base::FilePath suggested_path(suggested_directory.Append(generated_name));
   BrowserThread::PostTask(

@@ -13,7 +13,15 @@ namespace application_manifest_keys {
 const char kNameKey[] = "name";
 const char kDisplay[] = "display";
 const char kStartURLKey[] = "start_url";
+const char kScopeKey[] = "scope";
 const char kCSPKey[] = "csp";
+const char kBoundsKey[] = "xwalk_bounds";
+const char kWidthKey[] = "width";
+const char kHeightKey[] = "height";
+const char kMinWidthKey[] = "min-width";
+const char kMinHeightKey[] = "min-height";
+const char kMaxWidthKey[] = "max-width";
+const char kMaxHeightKey[] = "max-height";
 
 // Deprecated entries:
 
@@ -97,6 +105,9 @@ const char kPreferencesNameKey[] = "@name";
 const char kPreferencesValueKey[] = "@value";
 const char kPreferencesReadonlyKey[] = "@readonly";
 
+const char kWidgetNamespaceKey[] = "widget.@namespace";
+const char kWidgetNamespacePrefix[] = "http://www.w3.org/ns/widgets";
+
 // Child keys inside 'kAccessKey'.
 const char kAccessOriginKey[] = "@origin";
 const char kAccessSubdomainsKey[] = "@subdomains";
@@ -150,14 +161,34 @@ const char kTizenAppWidgetBoxContentDropViewKey[] = "pd";
 const char kTizenAppWidgetBoxContentDropViewSrcKey[] = "@src";
 const char kTizenAppWidgetBoxContentDropViewWidthKey[] = "@width";
 const char kTizenAppWidgetBoxContentDropViewHeightKey[] = "@height";
+// App control
+const char kTizenApplicationAppControlsKey[] = "widget.app-control";
+const char kTizenApplicationAppControlSrcKey[] = "src";
+const char kTizenApplicationAppControlOperationKey[] = "operation";
+const char kTizenApplicationAppControlUriKey[] = "uri";
+const char kTizenApplicationAppControlMimeKey[] = "mime";
+const char kTizenApplicationAppControlChildNameAttrKey[] = "@name";
+// IME
+const char kTizenImeKey[] = "widget.ime";
+const char kTizenImeUuidKey[] = "uuid";
+const char kTizenImeUuidTextKey[] = "#text";
+const char kTizenImeLanguagesKey[] = "languages";
+const char kTizenImeLanguageKey[] = "language";
+const char kTizenImeLanguageTextKey[] = "#text";
+// category
+const char kTizenCategoryKey[] = "widget.category";
+const char kTizenCategoryNameKey[] = "@name";
+const char kTizenNamespacePrefix[] = "http://tizen.org/ns/widgets";
 #endif
 
 }  // namespace application_widget_keys
 
-const char kW3CNamespacePrefix[] = "http://www.w3.org/ns/widgets";
-#if defined(OS_TIZEN)
-const char kTizenNamespacePrefix[] = "http://tizen.org/ns/widgets";
-#endif
+namespace application_manifest_values {
+const char kDisplayModeFullscreen[] = "fullscreen";
+const char kDisplayModeStandalone[] = "standalone";
+const char kDisplayModeMinimalUI[] = "minimal-ui";
+const char kDisplayModeBrowser[] = "browser";
+}  // namespace application_manifest_values
 
 namespace application_manifest_errors {
 const char kInvalidDescription[] =

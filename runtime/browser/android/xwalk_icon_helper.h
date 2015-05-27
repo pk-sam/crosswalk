@@ -35,15 +35,15 @@ class XWalkIconHelper : public content::WebContentsObserver {
   };
 
   explicit XWalkIconHelper(content::WebContents* web_contents);
-  virtual ~XWalkIconHelper();
+  ~XWalkIconHelper() override;
 
   void SetListener(Listener* listener);
 
   void DownloadIcon(const GURL& icon_url);
 
   // From WebContentsObserver
-  virtual void DidUpdateFaviconURL(
-      const std::vector<content::FaviconURL>& candidates) OVERRIDE;
+  void DidUpdateFaviconURL(
+      const std::vector<content::FaviconURL>& candidates) override;
 
   void DownloadFaviconCallback(
       int id,

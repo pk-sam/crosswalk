@@ -18,8 +18,8 @@ class XWalkRenderViewHostExt;
 
 class XWalkSettings : public content::WebContentsObserver {
  public:
-  XWalkSettings(JNIEnv* env, jobject obj, jlong web_contents);
-  virtual ~XWalkSettings();
+  XWalkSettings(JNIEnv* env, jobject obj, content::WebContents* web_contents);
+  ~XWalkSettings() override;
 
   // Called from Java.
   void Destroy(JNIEnv* env, jobject obj);
@@ -37,8 +37,8 @@ class XWalkSettings : public content::WebContentsObserver {
   void UpdatePreferredSizeMode();
 
   // WebContentsObserver overrides:
-  virtual void RenderViewCreated(
-      content::RenderViewHost* render_view_host) OVERRIDE;
+  void RenderViewCreated(
+      content::RenderViewHost* render_view_host) override;
 
   // Java field references for accessing the values in the Java object.
   scoped_ptr<FieldIds> field_ids_;

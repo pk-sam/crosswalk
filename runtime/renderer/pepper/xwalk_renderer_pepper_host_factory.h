@@ -14,14 +14,14 @@ class RendererPpapiHost;
 class XWalkRendererPepperHostFactory : public ppapi::host::HostFactory {
  public:
   explicit XWalkRendererPepperHostFactory(content::RendererPpapiHost* host);
-  virtual ~XWalkRendererPepperHostFactory();
+  ~XWalkRendererPepperHostFactory() override;
 
   // HostFactory.
-  virtual scoped_ptr<ppapi::host::ResourceHost> CreateResourceHost(
+  scoped_ptr<ppapi::host::ResourceHost> CreateResourceHost(
       ppapi::host::PpapiHost* host,
-      const ppapi::proxy::ResourceMessageCallParams& params,
+      PP_Resource resource,
       PP_Instance instance,
-      const IPC::Message& message) OVERRIDE;
+      const IPC::Message& message) override;
 
  private:
   // Not owned by this object.

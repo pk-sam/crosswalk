@@ -9,9 +9,9 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/files/scoped_file.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/main_function_params.h"
-#include "xwalk/runtime/browser/runtime_geolocation_permission_context.h"
 #include "xwalk/runtime/browser/runtime_resource_dispatcher_host_delegate.h"
 
 namespace content {
@@ -29,7 +29,7 @@ class URLRequestContextGetter;
 
 namespace xwalk {
 
-class RuntimeContext;
+class XWalkBrowserContext;
 class XWalkBrowserMainParts;
 class XWalkRunner;
 
@@ -38,47 +38,47 @@ class XWalkContentBrowserClient : public content::ContentBrowserClient {
   static XWalkContentBrowserClient* Get();
 
   explicit XWalkContentBrowserClient(XWalkRunner* xwalk_runner);
-  virtual ~XWalkContentBrowserClient();
+  ~XWalkContentBrowserClient() override;
 
   // ContentBrowserClient overrides.
-  virtual content::BrowserMainParts* CreateBrowserMainParts(
-      const content::MainFunctionParams& parameters) OVERRIDE;
-  virtual net::URLRequestContextGetter* CreateRequestContext(
+  content::BrowserMainParts* CreateBrowserMainParts(
+      const content::MainFunctionParams& parameters) override;
+  net::URLRequestContextGetter* CreateRequestContext(
       content::BrowserContext* browser_context,
       content::ProtocolHandlerMap* protocol_handlers,
-      content::URLRequestInterceptorScopedVector request_interceptors) OVERRIDE;
-  virtual net::URLRequestContextGetter* CreateRequestContextForStoragePartition(
+      content::URLRequestInterceptorScopedVector request_interceptors) override;
+  net::URLRequestContextGetter* CreateRequestContextForStoragePartition(
       content::BrowserContext* browser_context,
       const base::FilePath& partition_path,
       bool in_memory,
       content::ProtocolHandlerMap* protocol_handlers,
-      content::URLRequestInterceptorScopedVector request_interceptors) OVERRIDE;
-  virtual void AppendExtraCommandLineSwitches(CommandLine* command_line,
-                                              int child_process_id) OVERRIDE;
-  virtual content::QuotaPermissionContext*
-      CreateQuotaPermissionContext() OVERRIDE;
-  virtual content::AccessTokenStore* CreateAccessTokenStore() OVERRIDE;
-  virtual content::WebContentsViewDelegate* GetWebContentsViewDelegate(
-      content::WebContents* web_contents) OVERRIDE;
-  virtual void RenderProcessWillLaunch(
-      content::RenderProcessHost* host) OVERRIDE;
-  virtual content::MediaObserver* GetMediaObserver() OVERRIDE;
+      content::URLRequestInterceptorScopedVector request_interceptors) override;
+  void AppendExtraCommandLineSwitches(base::CommandLine* command_line,
+                                      int child_process_id) override;
+  content::QuotaPermissionContext*
+      CreateQuotaPermissionContext() override;
+  content::AccessTokenStore* CreateAccessTokenStore() override;
+  content::WebContentsViewDelegate* GetWebContentsViewDelegate(
+      content::WebContents* web_contents) override;
+  void RenderProcessWillLaunch(
+      content::RenderProcessHost* host) override;
+  content::MediaObserver* GetMediaObserver() override;
 
-  virtual bool AllowGetCookie(const GURL& url,
-                              const GURL& first_party,
-                              const net::CookieList& cookie_list,
-                              content::ResourceContext* context,
-                              int render_process_id,
-                              int render_frame_id) OVERRIDE;
-  virtual bool AllowSetCookie(const GURL& url,
-                              const GURL& first_party,
-                              const std::string& cookie_line,
-                              content::ResourceContext* context,
-                              int render_process_id,
-                              int render_frame_id,
-                              net::CookieOptions* options) OVERRIDE;
+  bool AllowGetCookie(const GURL& url,
+                      const GURL& first_party,
+                      const net::CookieList& cookie_list,
+                      content::ResourceContext* context,
+                      int render_process_id,
+                      int render_frame_id) override;
+  bool AllowSetCookie(const GURL& url,
+                      const GURL& first_party,
+                      const std::string& cookie_line,
+                      content::ResourceContext* context,
+                      int render_process_id,
+                      int render_frame_id,
+                      net::CookieOptions* options) override;
 
-  virtual void AllowCertificateError(
+  void AllowCertificateError(
       int render_process_id,
       int render_frame_id,
       int cert_error,
@@ -89,68 +89,59 @@ class XWalkContentBrowserClient : public content::ContentBrowserClient {
       bool strict_enforcement,
       bool expired_previous_decision,
       const base::Callback<void(bool)>& callback, // NOLINT
-      content::CertificateRequestResultType* result) OVERRIDE;
+      content::CertificateRequestResultType* result) override;
 
-  virtual content::SpeechRecognitionManagerDelegate*
-      GetSpeechRecognitionManagerDelegate() OVERRIDE;
+  content::SpeechRecognitionManagerDelegate*
+      CreateSpeechRecognitionManagerDelegate() override;
 
-  virtual void RequestDesktopNotificationPermission(
-      const GURL& source_origin,
-      content::RenderFrameHost* render_frame_host,
-      const base::Callback<void(blink::WebNotificationPermission)>& callback) OVERRIDE; // NOLINT
-  virtual blink::WebNotificationPermission
-  CheckDesktopNotificationPermission(
-      const GURL& source_url,
-      content::ResourceContext* context,
-      int render_process_id) OVERRIDE;
-  virtual void ShowDesktopNotification(
-      const content::ShowDesktopNotificationHostMsgParams& params,
-      content::RenderFrameHost* render_frame_host,
-      scoped_ptr<content::DesktopNotificationDelegate> delegate,
-      base::Closure* cancel_callback) OVERRIDE;
-  virtual void RequestGeolocationPermission(
-      content::WebContents* web_contents,
-      int bridge_id,
-      const GURL& requesting_frame,
-      bool user_gesture,
-      base::Callback<void(bool)> result_callback,
-      base::Closure* cancel_callback) OVERRIDE;
+  content::PlatformNotificationService* GetPlatformNotificationService()
+      override;
+
 #if !defined(OS_ANDROID)
-  virtual bool CanCreateWindow(const GURL& opener_url,
-                               const GURL& opener_top_level_frame_url,
-                               const GURL& source_origin,
-                               WindowContainerType container_type,
-                               const GURL& target_url,
-                               const content::Referrer& referrer,
-                               WindowOpenDisposition disposition,
-                               const blink::WebWindowFeatures& features,
-                               bool user_gesture,
-                               bool opener_suppressed,
-                               content::ResourceContext* context,
-                               int render_process_id,
-                               int opener_id,
-                               bool* no_javascript_access) OVERRIDE;
+  bool CanCreateWindow(const GURL& opener_url,
+                       const GURL& opener_top_level_frame_url,
+                       const GURL& source_origin,
+                       WindowContainerType container_type,
+                       const GURL& target_url,
+                       const content::Referrer& referrer,
+                       WindowOpenDisposition disposition,
+                       const blink::WebWindowFeatures& features,
+                       bool user_gesture,
+                       bool opener_suppressed,
+                       content::ResourceContext* context,
+                       int render_process_id,
+                       int opener_id,
+                       bool* no_javascript_access) override;
 #endif
 
-  virtual void DidCreatePpapiPlugin(
-      content::BrowserPpapiHost* browser_host) OVERRIDE;
-  virtual content::BrowserPpapiHost* GetExternalBrowserPpapiHost(
-      int plugin_process_id) OVERRIDE;
+  void DidCreatePpapiPlugin(
+      content::BrowserPpapiHost* browser_host) override;
+  content::BrowserPpapiHost* GetExternalBrowserPpapiHost(
+      int plugin_process_id) override;
 
 #if defined(OS_ANDROID) || defined(OS_TIZEN)  || defined(OS_LINUX)
-  virtual void ResourceDispatcherHostCreated() OVERRIDE;
+  void ResourceDispatcherHostCreated() override;
 #endif
 
-  virtual void GetStoragePartitionConfigForSite(
+  content::LocationProvider* OverrideSystemLocationProvider() override;
+
+  void GetStoragePartitionConfigForSite(
       content::BrowserContext* browser_context,
       const GURL& site,
       bool can_be_default,
       std::string* partition_domain,
       std::string* partition_name,
-      bool* in_memory) OVERRIDE;
+      bool* in_memory) override;
 
-  virtual content::DevToolsManagerDelegate*
-      GetDevToolsManagerDelegate() OVERRIDE;
+  content::DevToolsManagerDelegate*
+      GetDevToolsManagerDelegate() override;
+
+#if defined(OS_POSIX) && !defined(OS_MACOSX)
+  void GetAdditionalMappedFilesForChildProcess(
+      const base::CommandLine& command_line,
+      int child_process_id,
+      content::FileDescriptorInfo* mappings) override;
+#endif
 
   XWalkBrowserMainParts* main_parts() { return main_parts_; }
 
@@ -160,13 +151,19 @@ class XWalkContentBrowserClient : public content::ContentBrowserClient {
   }
 #endif
 
+  std::string GetApplicationLocale() override;
+
  private:
   XWalkRunner* xwalk_runner_;
   net::URLRequestContextGetter* url_request_context_getter_;
-  scoped_refptr<RuntimeGeolocationPermissionContext>
-    geolocation_permission_context_;
+
+#if defined(OS_POSIX) && !defined(OS_MACOSX)
+  base::ScopedFD v8_natives_fd_;
+  base::ScopedFD v8_snapshot_fd_;
+#endif
+
   XWalkBrowserMainParts* main_parts_;
-  RuntimeContext* runtime_context_;
+  XWalkBrowserContext* browser_context_;
 
   scoped_ptr<RuntimeResourceDispatcherHostDelegate>
       resource_dispatcher_host_delegate_;

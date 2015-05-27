@@ -17,7 +17,7 @@ namespace application {
 class CSPInfo : public ApplicationData::ManifestData {
  public:
   CSPInfo();
-  virtual ~CSPInfo();
+  ~CSPInfo() override;
 
   void SetDirective(const std::string& directive_name,
                     const std::vector<std::string>& directive_value) {
@@ -33,12 +33,12 @@ class CSPInfo : public ApplicationData::ManifestData {
 class CSPHandler : public ManifestHandler {
  public:
   explicit CSPHandler(Manifest::Type type);
-  virtual ~CSPHandler();
+  ~CSPHandler() override;
 
-  virtual bool Parse(scoped_refptr<ApplicationData> application,
-                     base::string16* error) OVERRIDE;
-  virtual bool AlwaysParseForType(Manifest::Type type) const OVERRIDE;
-  virtual std::vector<std::string> Keys() const OVERRIDE;
+  bool Parse(scoped_refptr<ApplicationData> application,
+             base::string16* error) override;
+  bool AlwaysParseForType(Manifest::Type type) const override;
+  std::vector<std::string> Keys() const override;
 
  private:
   Manifest::Type type_;

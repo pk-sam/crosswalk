@@ -17,7 +17,7 @@ namespace application {
 class PermissionsInfo: public ApplicationData::ManifestData {
  public:
   PermissionsInfo();
-  virtual ~PermissionsInfo();
+  ~PermissionsInfo() override;
 
   const PermissionSet& GetAPIPermissions() const {
     return api_permissions_;}
@@ -33,12 +33,12 @@ class PermissionsInfo: public ApplicationData::ManifestData {
 class PermissionsHandler: public ManifestHandler {
  public:
   PermissionsHandler();
-  virtual ~PermissionsHandler();
+  ~PermissionsHandler() override;
 
-  virtual bool Parse(scoped_refptr<ApplicationData> application,
-                     base::string16* error) OVERRIDE;
-  virtual bool AlwaysParseForType(Manifest::Type type) const OVERRIDE;
-  virtual std::vector<std::string> Keys() const OVERRIDE;
+  bool Parse(scoped_refptr<ApplicationData> application,
+             base::string16* error) override;
+  bool AlwaysParseForType(Manifest::Type type) const override;
+  std::vector<std::string> Keys() const override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PermissionsHandler);

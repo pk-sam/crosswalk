@@ -3,27 +3,37 @@
 // found in the LICENSE file.
 
 #include "base/android/jni_android.h"
-#include "base/android/jni_registrar.h"
-#include "base/android/library_loader/library_loader_hooks.h"
-#include "content/public/app/android_library_loader_hooks.h"
+#include "base/bind.h"
+#include "content/public/app/content_jni_onload.h"
 #include "content/public/app/content_main.h"
 #include "content/public/app/content_main_delegate.h"
 #include "xwalk/runtime/app/android/xwalk_jni_registrar.h"
 #include "xwalk/runtime/app/android/xwalk_main_delegate_android.h"
 
+namespace {
+
+bool RegisterJNI(JNIEnv* env) {
+  return xwalk::RegisterJni(env);
+}
+
+bool Init() {
+  content::SetContentMainDelegate(new xwalk::XWalkMainDelegateAndroid());
+  return true;
+}
+
+}  // namespace
+
 // This is called by the VM when the shared library is first loaded.
 JNI_EXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved) {
-  base::android::SetLibraryLoadedHook(&content::LibraryLoaded);
+  std::vector<base::android::RegisterCallback> register_callbacks;
+  register_callbacks.push_back(base::Bind(&RegisterJNI));
 
-  base::android::InitVM(vm);
-  JNIEnv* env = base::android::AttachCurrentThread();
-  if (!base::android::RegisterLibraryLoaderEntryHook(env))
+  std::vector<base::android::InitCallback> init_callbacks;
+  init_callbacks.push_back(base::Bind(&Init));
+
+  if (!content::android::OnJNIOnLoadRegisterJNI(
+          vm, register_callbacks) ||
+      !content::android::OnJNIOnLoadInit(init_callbacks))
     return -1;
-
-  if (!xwalk::RegisterJni(env))
-    return -1;
-
-  content::SetContentMainDelegate(new xwalk::XWalkMainDelegateAndroid());
-
   return JNI_VERSION_1_4;
 }

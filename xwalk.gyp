@@ -7,6 +7,14 @@
       ['OS=="win" or OS=="mac"', {
         'disable_nacl': 1,
       }],
+      ['OS=="android"', {
+        'enable_extensions': 1,
+        # Whether we should verify package integrity before loading Crosswalk runtime libraray in shared mode
+        'verify_xwalk_apk%': 0,
+      }],
+      ['OS=="tizen"', {
+        'use_webui_file_picker': 1,
+      }],
     ], # conditions
   },
   'includes' : [
@@ -27,6 +35,7 @@
         '../base/base.gyp:base_i18n',
         '../base/third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
         '../cc/cc.gyp:cc',
+        '../components/components.gyp:autofill_content_renderer',
         '../components/components.gyp:visitedlink_browser',
         '../components/components.gyp:visitedlink_renderer',
         '../content/content.gyp:content',
@@ -38,6 +47,7 @@
         '../content/content.gyp:content_ppapi_plugin',
         '../content/content.gyp:content_renderer',
         '../content/content.gyp:content_utility',
+        '../gin/gin.gyp:gin',
         '../ipc/ipc.gyp:ipc',
         '../media/media.gyp:media',
         '../net/net.gyp:net',
@@ -69,6 +79,7 @@
         'experimental/native_file_system/native_file_system_extension.cc',
         'experimental/native_file_system/native_file_system_extension.h',
         'experimental/native_file_system/virtual_root_provider_mac.cc',
+        'experimental/native_file_system/virtual_root_provider_tizen.cc',
         'experimental/native_file_system/virtual_root_provider_win.cc',
         'experimental/native_file_system/virtual_root_provider.cc',
         'experimental/native_file_system/virtual_root_provider.h',
@@ -152,10 +163,6 @@
         'runtime/browser/renderer_host/pepper/xwalk_browser_pepper_host_factory.h',
         'runtime/browser/runtime.cc',
         'runtime/browser/runtime.h',
-        'runtime/browser/runtime_context.cc',
-        'runtime/browser/runtime_context.h',
-        'runtime/browser/runtime_defered_ui_strategy.cc',
-        'runtime/browser/runtime_defered_ui_strategy.h',
         'runtime/browser/runtime_download_manager_delegate.cc',
         'runtime/browser/runtime_download_manager_delegate.h',
         'runtime/browser/runtime_file_select_helper.cc',
@@ -181,12 +188,16 @@
         'runtime/browser/runtime_resource_dispatcher_host_delegate_android.h',
         'runtime/browser/runtime_select_file_policy.cc',
         'runtime/browser/runtime_select_file_policy.h',
-        'runtime/browser/runtime_ui_strategy.cc',
-        'runtime/browser/runtime_ui_strategy.h',
+        'runtime/browser/runtime_ui_delegate.cc',
+        'runtime/browser/runtime_ui_delegate.h',
+        'runtime/browser/runtime_ui_delegate_desktop.cc',
+        'runtime/browser/runtime_ui_delegate_desktop.h',
         'runtime/browser/runtime_url_request_context_getter.cc',
         'runtime/browser/runtime_url_request_context_getter.h',
         'runtime/browser/speech/speech_recognition_manager_delegate.cc',
         'runtime/browser/speech/speech_recognition_manager_delegate.h',
+        'runtime/browser/ssl_error_page.cc',
+        'runtime/browser/ssl_error_page.h',
         'runtime/browser/sysapps_component.cc',
         'runtime/browser/sysapps_component.h',
         'runtime/browser/storage_component.cc',
@@ -198,7 +209,11 @@
         'runtime/browser/ui/color_chooser_mac.cc',
         'runtime/browser/ui/native_app_window.cc',
         'runtime/browser/ui/native_app_window.h',
+        'runtime/browser/ui/native_app_window_aura.cc',
+        'runtime/browser/ui/native_app_window_aura.h',
         'runtime/browser/ui/native_app_window_android.cc',
+        'runtime/browser/ui/native_app_window_desktop.cc',
+        'runtime/browser/ui/native_app_window_desktop.h',
         'runtime/browser/ui/native_app_window_mac.h',
         'runtime/browser/ui/native_app_window_mac.mm',
         'runtime/browser/ui/native_app_window_tizen.cc',
@@ -217,6 +232,8 @@
         'runtime/browser/xwalk_app_extension_bridge.h',
         'runtime/browser/xwalk_application_mac.h',
         'runtime/browser/xwalk_application_mac.mm',
+        'runtime/browser/xwalk_browser_context.cc',
+        'runtime/browser/xwalk_browser_context.h',
         'runtime/browser/xwalk_browser_main_parts.cc',
         'runtime/browser/xwalk_browser_main_parts.h',
         'runtime/browser/xwalk_browser_main_parts_android.cc',
@@ -228,6 +245,10 @@
         'runtime/browser/xwalk_component.h',
         'runtime/browser/xwalk_content_browser_client.cc',
         'runtime/browser/xwalk_content_browser_client.h',
+        'runtime/browser/xwalk_permission_manager.cc',
+        'runtime/browser/xwalk_permission_manager.h',
+        'runtime/browser/xwalk_platform_notification_service.cc',
+        'runtime/browser/xwalk_platform_notification_service.h',
         'runtime/browser/xwalk_render_message_filter.cc',
         'runtime/browser/xwalk_render_message_filter.h',
         'runtime/browser/xwalk_runner.cc',
@@ -236,6 +257,8 @@
         'runtime/browser/xwalk_runner_android.h',
         'runtime/browser/xwalk_runner_tizen.cc',
         'runtime/browser/xwalk_runner_tizen.h',
+        'runtime/browser/xwalk_ssl_host_state_delegate.cc',
+        'runtime/browser/xwalk_ssl_host_state_delegate.h',
         'runtime/common/android/xwalk_globals_android.cc',
         'runtime/common/android/xwalk_globals_android.h',
         'runtime/common/android/xwalk_hit_test_data.cc',
@@ -297,25 +320,19 @@
         ['tizen==1', {
           'dependencies': [
             '../content/app/resources/content_resources.gyp:content_resources',
+            '../ui/compositor/compositor.gyp:compositor',
             'build/system.gyp:tizen_geolocation',
+            'build/system.gyp:tizen_tzplatform_config',
             'sysapps/sysapps_resources.gyp:xwalk_sysapps_resources',
             'tizen/xwalk_tizen.gypi:xwalk_tizen_lib',
             '<(DEPTH)/third_party/jsoncpp/jsoncpp.gyp:jsoncpp',
             '../components/components.gyp:web_modal',
             '../components/components.gyp:renderer_context_menu',
+
+            # https://code.google.com/p/chromium/issues/detail?id=449919#c30
+            '../extensions/extensions.gyp:extensions_browser',
           ],
-          'cflags': [
-            '<!@(pkg-config --cflags libtzplatform-config)',
-          ],
-          'link_settings': {
-            'libraries': [
-              '<!@(pkg-config --libs libtzplatform-config)',
-            ],
-          },
           'sources': [
-            'experimental/native_file_system/virtual_root_provider_tizen.cc',
-            'runtime/browser/tizen/tizen_locale_listener.cc',
-            'runtime/browser/tizen/tizen_locale_listener.h',
             'runtime/browser/tizen/xwalk_web_contents_view_delegate.cc',
             'runtime/browser/tizen/xwalk_web_contents_view_delegate.h',
             'runtime/browser/tizen/render_view_context_menu_impl.cc',
@@ -323,6 +340,10 @@
           ],
           'sources!':[
             'runtime/browser/runtime_platform_util_linux.cc',
+            'runtime/browser/runtime_ui_delegate_desktop.cc',
+            'runtime/browser/runtime_ui_delegate_desktop.h',
+            'runtime/browser/ui/native_app_window_desktop.cc',
+            'runtime/browser/ui/native_app_window_desktop.h',
             'runtime/browser/android/xwalk_web_contents_view_delegate.cc',
             'runtime/browser/android/xwalk_web_contents_view_delegate.h',
           ],
@@ -336,6 +357,10 @@
             'experimental/native_file_system/virtual_root_provider_android.cc',
           ],
           'sources!':[
+            'runtime/browser/runtime_ui_delegate_desktop.cc',
+            'runtime/browser/runtime_ui_delegate_desktop.h',
+            'runtime/browser/ui/native_app_window_desktop.cc',
+            'runtime/browser/ui/native_app_window_desktop.h',
             'runtime/renderer/xwalk_render_process_observer_generic.cc',
             'runtime/renderer/xwalk_render_process_observer_generic.h',
           ],
@@ -346,9 +371,6 @@
           ],
         }],
         ['OS=="win"', {
-          'resource_include_dirs': [
-            '<(SHARED_INTERMEDIATE_DIR)/webkit',
-          ],
           'configurations': {
             'Debug_Base': {
               'msvs_settings': {
@@ -361,6 +383,15 @@
           # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
           'msvs_disabled_warnings': [ 4267, ],
         }],  # OS=="win"
+        ['OS=="linux" and tizen!=1', {
+          'dependencies': [
+            'build/system.gyp:libnotify',
+          ],
+          'sources': [
+            'runtime/browser/linux/xwalk_notification_manager.cc',
+            'runtime/browser/linux/xwalk_notification_manager.h',
+          ]
+        }],  # OS=="linux" and tizen!=1
         ['OS=="linux"', {
           'dependencies': [
             '../build/linux/system.gyp:fontconfig',
@@ -384,16 +415,51 @@
             '../ui/views/views.gyp:views',
             '../ui/resources/ui_resources.gyp:ui_resources',
           ],
+          'sources/': [
+            ['exclude', 'runtime/browser/ui/native_app_window_aura.cc'],
+          ],
+        }, { # toolkit_views==0
+          'sources/': [
+            ['exclude', 'runtime/browser/ui/xwalk_views_delegate.cc'],
+            ['exclude', 'runtime/browser/ui/color_chooser_aura.cc'],
+          ],
         }],  # toolkit_views==1
         ['use_aura==1', {
           'dependencies': [
             '../ui/aura/aura.gyp:aura',
-          ],
-        }, {  # use_aura==0
-          'sources/': [
-            ['exclude', '_aura\\.cc$'],
+            '../ui/base/ime/ui_base_ime.gyp:ui_base_ime',
           ],
         }],
+        ['use_webui_file_picker==1', {
+          'defines': ['USE_WEBUI_FILE_PICKER'],
+          'dependencies': [
+            '../content/app/resources/content_resources.gyp:content_resources',
+          ],
+          'sources': [
+            'runtime/browser/ui/browser_dialogs.h',
+            'runtime/browser/ui/xwalk_web_dialog_view.cc',
+            'runtime/browser/ui/linux_webui/select_file_dialog_impl_webui.h',
+            'runtime/browser/ui/linux_webui/select_file_dialog_impl_webui.cc',
+            'runtime/browser/ui/linux_webui/linux_webui.h',
+            'runtime/browser/ui/linux_webui/linux_webui.cc',
+            'runtime/browser/ui/webui/file_picker/file_picker_web_dialog.h',
+            'runtime/browser/ui/webui/file_picker/file_picker_web_dialog.cc',
+            'runtime/browser/ui/webui/file_picker/file_picker_ui.cc',
+            'runtime/browser/ui/webui/file_picker/file_picker_ui.h',
+            'runtime/browser/ui/webui/xwalk_web_contents_handler.cc',
+            'runtime/browser/ui/webui/xwalk_web_contents_handler.h',
+            'runtime/browser/ui/webui/xwalk_web_ui_controller_factory.cc',
+            'runtime/browser/ui/webui/xwalk_web_ui_controller_factory.h',
+            'runtime/common/url_constants.cc',
+            'runtime/common/url_constants.h',
+          ],
+        }],
+        ['OS=="linux" and use_ozone!=1', {
+          'defines': ['USE_GTK_UI'],
+          'dependencies': [
+            '../chrome/browser/ui/libgtk2ui/libgtk2ui.gyp:gtk2ui',
+          ],
+        }],  # OS=="linux" and tizen!=1
         ['disable_nacl==0', {
             'conditions': [
                 ['OS=="linux"', {
@@ -409,13 +475,26 @@
                     '../components/nacl.gyp:nacl_helper',
                     '../components/nacl.gyp:nacl_linux',
                     '../native_client/src/trusted/service_runtime/linux/nacl_bootstrap.gyp:nacl_helper_bootstrap',
-                    '../ppapi/native_client/src/trusted/plugin/plugin.gyp:nacl_trusted_plugin',
+                    '../components/nacl/renderer/plugin/plugin.gyp:nacl_trusted_plugin',
                   ],
                 }],
             ],
         }],
         ['enable_plugins==1', {
+          'sources': [
+            '../chrome/renderer/pepper/pepper_flash_drm_renderer_host.cc',
+            '../chrome/renderer/pepper/pepper_flash_drm_renderer_host.h',
+            '../chrome/renderer/pepper/pepper_flash_font_file_host.cc',
+            '../chrome/renderer/pepper/pepper_flash_font_file_host.h',
+            '../chrome/renderer/pepper/pepper_flash_fullscreen_host.cc',
+            '../chrome/renderer/pepper/pepper_flash_fullscreen_host.h',
+            '../chrome/renderer/pepper/pepper_flash_menu_host.cc',
+            '../chrome/renderer/pepper/pepper_flash_menu_host.h',
+            '../chrome/renderer/pepper/pepper_flash_renderer_host.cc',
+            '../chrome/renderer/pepper/pepper_flash_renderer_host.h',
+          ],
           'dependencies': [
+            '../components/components.gyp:pdf_renderer',
             '../ppapi/ppapi_internal.gyp:ppapi_host',
             '../ppapi/ppapi_internal.gyp:ppapi_proxy',
             '../ppapi/ppapi_internal.gyp:ppapi_ipc',
@@ -425,6 +504,11 @@
           'sources/': [
             ['exclude', '^runtime/browser/renderer_host/pepper/'],
             ['exclude', '^runtime/renderer/pepper/'],
+          ],
+        }],
+        ['tizen!=1 and OS!="android"', {
+          'dependencies': [
+            'xwalk_strings',
           ],
         }],
       ],
@@ -494,6 +578,30 @@
       ],
     },
     {
+      'target_name': 'xwalk_strings',
+      'type': 'none',
+      'variables': {
+        'grit_out_dir': '<(SHARED_INTERMEDIATE_DIR)/xwalk/locales',
+      },
+      'actions': [
+        {
+          'action_name': 'generate_xwalk_strings',
+          'variables': {
+            'grit_grd_file': 'runtime/resources/xwalk_strings.grd',
+            'grit_resource_ids': 'resources/resource_ids',
+          },
+          'includes': [ '../build/grit_action.gypi' ],
+          'outputs': [ '<(grit_out_dir)' ]
+        },
+      ],
+      'copies': [
+        {
+          'destination': '<(PRODUCT_DIR)/',
+          'files': [ '<(grit_out_dir)/' ],
+        },
+      ],
+    },
+    {
       # Build a minimal set of resources so Blink in XWalk has
       # access to necessary resources.
       'target_name': 'xwalk_pak',
@@ -529,6 +637,7 @@
               '<(SHARED_INTERMEDIATE_DIR)/ui/strings/app_locale_settings_en-US.pak',
               '<(SHARED_INTERMEDIATE_DIR)/ui/strings/ui_strings_en-US.pak',
               '<(SHARED_INTERMEDIATE_DIR)/content/content_resources.pak',
+              '<(SHARED_INTERMEDIATE_DIR)/blink/public/resources/blink_image_resources_100_percent.pak',
               '<(SHARED_INTERMEDIATE_DIR)/blink/public/resources/blink_resources.pak',
               '<(SHARED_INTERMEDIATE_DIR)/content/app/strings/content_strings_en-US.pak',
             ],
@@ -537,7 +646,7 @@
             [ 'OS!="android"', {
               'variables': {
                 'pak_inputs+': [
-                  '<(SHARED_INTERMEDIATE_DIR)/webkit/devtools_resources.pak',
+                  '<(SHARED_INTERMEDIATE_DIR)/blink/devtools_resources.pak',
                 ],
               },
             }],
@@ -548,10 +657,10 @@
                 ],
               },
             }],
-            [ 'tizen==1', {
+            [ 'use_webui_file_picker == 1', {
               'variables': {
                 'pak_inputs+': [
-                  # Add WebUI resources for Tizen.
+                  # Add WebUI resources.
                   '<(SHARED_INTERMEDIATE_DIR)/content/content_resources.pak',
                   '<(SHARED_INTERMEDIATE_DIR)/ui/resources/webui_resources.pak',
                 ],
@@ -724,12 +833,14 @@
 
             # For external testing.
             'pack_xwalk_core_library',
+            'pack_xwalk_shared_library',
             'xwalk_core_library_documentation',
             'xwalk_runtime_lib_apk',
             'xwalk_app_hello_world_apk',
             'xwalk_app_template',
             'xwalk_core_sample_apk',
             'xwalk_core_library_aar',
+            'xwalk_shared_library_aar',
             'xwalk_packaging_tool_test',
           ],
         }],
@@ -749,7 +860,9 @@
           'mac_bundle': 1,
           'mac_bundle_resources': [
             'runtime/app/English.lproj/MainMenu.xib',
-            '<(PRODUCT_DIR)/xwalk.pak'
+            '<(PRODUCT_DIR)/xwalk.pak',
+            '<(PRODUCT_DIR)/snapshot_blob.bin',
+            '<(PRODUCT_DIR)/natives_blob.bin',
           ],
           'dependencies': [
             'xwalk_runtime',
@@ -876,19 +989,27 @@
       'variables': {
         'variables': {
           'conditions': [
-            ['android_app_abi=="x86"', {
+            ['android_app_abi=="armeabi"', {
               'version_code_shift%': 1,
             }],
             ['android_app_abi=="armeabi-v7a"', {
               'version_code_shift%': 2,
             }],
-            ['android_app_abi=="armeabi"', {
+            ['android_app_abi=="arm64-v8a"', {
               'version_code_shift%': 3,
+            }],
+            ['android_app_abi=="x86"', {
+              'version_code_shift%': 4,
+            }],
+            ['android_app_abi=="x86_64"', {
+              'version_code_shift%': 5,
             }],
           ], # conditions
         },
         'version_code_shift%': '<(version_code_shift)',
         'xwalk_version_code': '<!(python tools/build/android/generate_version_code.py -f VERSION -s <(version_code_shift))',
+        'api_version': '<!(python ../build/util/version.py -f API_VERSION -t "@API@")',
+        'min_api_version': '<!(python ../build/util/version.py -f API_VERSION -t "@MIN_API@")',
       },
       'includes': [
         'xwalk_android.gypi',

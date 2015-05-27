@@ -12,14 +12,21 @@ namespace switches {
 
 extern const char kAppIcon[];
 extern const char kDisablePnacl[];
+extern const char kDiskCacheSize[];
 extern const char kExperimentalFeatures[];
-extern const char kFullscreen[];
 extern const char kListFeaturesFlags[];
 extern const char kXWalkAllowExternalExtensionsForRemoteSources[];
 extern const char kXWalkDataPath[];
+extern const char kAllowRunningInsecureContent[];
+extern const char kNoDisplayingInsecureContent[];
 
 #if defined(OS_ANDROID)
 extern const char kXWalkProfileName[];
+#endif
+
+#if defined(ENABLE_PLUGINS)
+extern const char kPpapiFlashPath[];
+extern const char kPpapiFlashVersion[];
 #endif
 
 }  // namespace switches

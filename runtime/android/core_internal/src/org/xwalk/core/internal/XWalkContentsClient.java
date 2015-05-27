@@ -22,8 +22,8 @@ import android.webkit.ValueCallback;
 import android.webkit.WebResourceResponse;
 
 import org.chromium.content.browser.ContentViewClient;
-import org.chromium.content.browser.WebContentsObserverAndroid;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.net.NetError;
 
 /**
@@ -45,7 +45,7 @@ abstract class XWalkContentsClient extends ContentViewClient {
 
     private double mDIPScale;
 
-    public class XWalkWebContentsObserver extends WebContentsObserverAndroid {
+    public class XWalkWebContentsObserver extends WebContentsObserver {
         public XWalkWebContentsObserver(WebContents webContents) {
             super(webContents);
         }
@@ -100,7 +100,7 @@ abstract class XWalkContentsClient extends ContentViewClient {
 
     void installWebContentsObserver(WebContents webContents) {
         if (mWebContentsObserver != null) {
-            mWebContentsObserver.detachFromWebContents();
+            mWebContentsObserver.destroy();
         }
         mWebContentsObserver = new XWalkWebContentsObserver(webContents);
     }
@@ -191,9 +191,8 @@ abstract class XWalkContentsClient extends ContentViewClient {
 
     // TODO (michaelbai): Remove this method once the same method remove from
     // XWalkContentsClientAdapter.
-    public void onShowCustomView(View view,
-           int requestedOrientation, XWalkWebChromeClient.CustomViewCallback callback) {
-    }
+    public abstract void onShowCustomView(View view,
+           int requestedOrientation, XWalkWebChromeClient.CustomViewCallback callback);
 
     // TODO (michaelbai): This method should be abstract, having empty body here
     // makes the merge to the Android easy.
@@ -218,5 +217,5 @@ abstract class XWalkContentsClient extends ContentViewClient {
      */
     public abstract void onNewPicture(Picture picture);
 
-    public abstract boolean shouldOpenWithDefaultBrowser(String contentUrl);
+    public abstract boolean shouldCreateWebContents(String contentUrl);
 }

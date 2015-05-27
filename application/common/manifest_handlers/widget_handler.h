@@ -18,7 +18,7 @@ namespace application {
 class WidgetInfo : public ApplicationData::ManifestData {
  public:
   WidgetInfo();
-  virtual ~WidgetInfo();
+  ~WidgetInfo() override;
   void SetString(const std::string& key, const std::string& value);
   void Set(const std::string& key, base::Value* value);
 
@@ -39,12 +39,15 @@ class WidgetInfo : public ApplicationData::ManifestData {
 class WidgetHandler : public ManifestHandler {
  public:
   WidgetHandler();
-  virtual ~WidgetHandler();
+  ~WidgetHandler() override;
 
-  virtual bool Parse(scoped_refptr<ApplicationData> application,
-                     base::string16* error) OVERRIDE;
-  virtual bool AlwaysParseForType(Manifest::Type type) const OVERRIDE;
-  virtual std::vector<std::string> Keys() const OVERRIDE;
+  bool Parse(scoped_refptr<ApplicationData> application,
+             base::string16* error) override;
+  bool AlwaysParseForType(Manifest::Type type) const override;
+  std::vector<std::string> Keys() const override;
+
+  bool Validate(scoped_refptr<const ApplicationData> application,
+                std::string* error) const override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(WidgetHandler);

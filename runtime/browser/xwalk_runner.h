@@ -22,10 +22,10 @@ class XWalkTestSuiteInitializer;
 
 namespace xwalk {
 
-class RuntimeContext;
 class ApplicationComponent;
 class RemoteDebuggingServer;
 class SysAppsComponent;
+class XWalkBrowserContext;
 class XWalkComponent;
 class XWalkContentBrowserClient;
 class XWalkAppExtensionBridge;
@@ -68,7 +68,7 @@ class XWalkRunner {
   // - In situations where you don't control the creation of a certain
   //   object. Certain APIs doesn't allow us to pass the dependencies, so we
   //   need to reach them some way.
-  RuntimeContext* runtime_context() { return runtime_context_.get(); }
+  XWalkBrowserContext* browser_context() { return browser_context_.get(); }
   application::ApplicationSystem* app_system();
   extensions::XWalkExtensionService* extension_service() {
     return extension_service_.get();
@@ -98,6 +98,13 @@ class XWalkRunner {
   virtual scoped_ptr<SysAppsComponent> CreateSysAppsComponent();
   virtual scoped_ptr<StorageComponent> CreateStorageComponent();
 
+ protected:
+  // These variables are used to export some values from the browser process
+  // side to the extension side, such as application IDs and whatnot.
+  virtual void InitializeRuntimeVariablesForExtensions(
+      const content::RenderProcessHost* host,
+      base::ValueMap* runtime_variables);
+
  private:
   friend class XWalkMainDelegate;
   friend class ::XWalkTestSuiteInitializer;
@@ -125,7 +132,7 @@ class XWalkRunner {
   content::ContentBrowserClient* GetContentBrowserClient();
 
   scoped_ptr<XWalkContentBrowserClient> content_browser_client_;
-  scoped_ptr<RuntimeContext> runtime_context_;
+  scoped_ptr<XWalkBrowserContext> browser_context_;
   scoped_ptr<extensions::XWalkExtensionService> extension_service_;
   scoped_ptr<XWalkAppExtensionBridge> app_extension_bridge_;
 
@@ -138,12 +145,6 @@ class XWalkRunner {
 
   // Remote debugger server.
   scoped_ptr<RemoteDebuggingServer> remote_debugging_server_;
-
-  // These variables are used to export some values from the browser process
-  // side to the extension side, such as application IDs and whatnot.
-  void InitializeRuntimeVariablesForExtensions(
-      const content::RenderProcessHost* host,
-      base::ValueMap* runtime_variables);
 
   DISALLOW_COPY_AND_ASSIGN(XWalkRunner);
 };

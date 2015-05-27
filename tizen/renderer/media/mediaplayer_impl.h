@@ -9,6 +9,8 @@
 
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "media/base/cdm_factory.h"
+#include "media/base/renderer_factory.h"
 #include "media/blink/webmediaplayer_impl.h"
 #include "xwalk/tizen/renderer/media/renderer_mediaplayer_manager.h"
 
@@ -22,13 +24,15 @@ class MediaPlayerImpl : public media::WebMediaPlayerImpl {
       blink::WebMediaPlayerClient* client,
       base::WeakPtr<media::WebMediaPlayerDelegate> delegate,
       RendererMediaPlayerManager* manager,
+      scoped_ptr<media::RendererFactory> renderer_factory,
+      scoped_ptr<media::CdmFactory> cdm_factory,
       const media::WebMediaPlayerParams& params);
-  virtual ~MediaPlayerImpl();
+  ~MediaPlayerImpl() override;
 
   // WebMediaPlayerImpl method.
-  virtual void load(LoadType load_type,
-                    const blink::WebURL& url,
-                    CORSMode cors_mode) OVERRIDE;
+  void load(LoadType load_type,
+            const blink::WebURL& url,
+            CORSMode cors_mode) override;
 
   // Playback controls.
   virtual void play();
